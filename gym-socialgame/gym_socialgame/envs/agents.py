@@ -224,7 +224,7 @@ class DeterministicFunctionPerson(Person):
 class RandomizedFunctionPerson(DeterministicFunctionPerson):
 	def __init__(self, baseline_energy_df, points_multiplier=1, response='t', low = 0, high = 50, distr = 'U'):
 	 
-	 """
+		"""
 		Adds Random Noise to DeterministicFunctionPerson energy output (for D.R. purposes)
 
 		New Args:
@@ -233,21 +233,21 @@ class RandomizedFunctionPerson(DeterministicFunctionPerson):
 			Distr = 'G' for Gaussian noise, 'U' for Uniform random noise (Note: Continuous distr.)
 
 		Note: For design purposes the random noise is updated at the end of each episode
-	 """
-	 #TODO: Multivariate distr??
+		"""
+		#TODO: Multivariate distr??
 
-	 super().__init__(baseline_energy_df, points_multiplier=points_multiplier, response=response)
-	 
-	 distr = distr.upper()
-	 assert distr in ['G', 'U']
+		super().__init__(baseline_energy_df, points_multiplier=points_multiplier, response=response)
 
-	 self.response = response
-	 self.low = low
-	 self.high = high if high < self.max_demand else 50
-	 self.distr = distr
+		distr = distr.upper()
+		assert distr in ['G', 'U']
 
-	 self.noise = []
-	 self.update_noise()
+		self.response = response
+		self.low = low
+		self.high = high if high < self.max_demand else 50
+		self.distr = distr
+
+		self.noise = []
+		self.update_noise()
 
 	def update_noise(self):
 		if(self.distr == 'G'):

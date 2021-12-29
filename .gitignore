@@ -12,3 +12,6 @@ wandb/
 __pycache__
 *.egg-info
 *.pem
+
+# virtual environment
+venv/

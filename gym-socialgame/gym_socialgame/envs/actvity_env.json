@@ -1,0 +1,131 @@
+{
+	"times" : {
+		"start": 1,
+		"stop": 100,
+		"interval": 1
+	},
+	"named_demand_units" : {
+		"I": [ 0.28, 11.9, 16.34, 16.8 ],
+		"II": [17.43, 16.15, 16.23, 15.88],
+		"III": [15.09, 35.6, 123.5, 148.7 ],
+		"IV": [158.49, 149.13, 159.32, 157.62],
+		"V": [158.8, 156.49, 147.04, 70.76],
+		"VI": [42.87, 23.13, 22.52, 16.8]
+	},
+	"activities" : {
+		"a": {
+			"demand_units": [
+				"I", "V", [22.3, 0.5]
+			],
+			"effect_vectors": {
+				"*": {
+					"b" : {
+						"*": 0
+					}
+				}
+			}
+		},
+		"b": {
+			"demand_units": [
+				"I", "V"
+			],
+			"effect_vectors": {
+				"*": { 
+					"a" : {
+						"*": 0
+					},
+					"c" : {
+						"2": 1
+					}
+				},
+				"person_2": {
+					"c" : {
+						"2": 10
+					}
+				}
+			}
+		},
+		"c": {
+			"demand_units": [
+				"II", "III", "IV"
+			],
+			"effect_vectors": {
+				"*": {
+					"b" : {
+						"*": 0
+					},
+					"d" : {
+						"*": 0.5
+					}
+				}
+			}
+		},
+		"d": {
+			"demand_units": [
+				"II", "VI", [0, 20.4, 6.3]
+			],
+			"effect_vectors": {
+				"*": {
+					"c" : {
+						"*": 0
+					},
+					"a" : {
+						"*": 5
+					}
+				}
+			}
+		}
+	},
+	"activity_consumers" : {
+		"*": {
+			"activity_values": {
+				"*": {
+					"*": 1
+				}
+			},
+			"activity_thresholds": {
+				"*": {
+					"*": 2
+				}
+			},
+			"demand_unit_price_factors": {
+				"*": {
+					"*": 1
+				}
+			},
+			"demand_unit_quantity_factors": {
+				"*": {
+					"*": 1
+				}
+			}
+		},
+		"person_1": {
+			"activity_values": {
+				"b": { 
+					"1": 10
+				},
+				"d": { 
+					"5": 2
+				}
+			},
+			"demand_unit_price_factor": {
+				"*": {
+					"*": 2
+				}
+			}
+		},
+		"person_2": {
+			"activity_values": {
+				"c": { 
+					"3": 2
+				},
+				"d": { 
+					"7": 2
+				},
+				"b": { 
+					"15": 4
+				}
+			}
+		}
+	}
+}

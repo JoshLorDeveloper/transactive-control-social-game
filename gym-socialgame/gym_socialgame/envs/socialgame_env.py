@@ -6,6 +6,7 @@ import random
 
 from gym_socialgame.envs.utils import price_signal
 from gym_socialgame.envs.agents import *
+from gym_socialgame.envs.activity_agent import *
 from gym_socialgame.envs.reward import Reward
 from gym_socialgame.envs.buffers import (GaussianBuffer, GaussianCircularBuffer)
 
@@ -102,6 +103,10 @@ class SocialGameEnv(gym.Env):
 
         #Create Players
         self.player_dict = self._create_agents()
+        self.activty_environment : ActivityEnvironment = ActivityEnvironment.build()
+        self.activity_consumer_dict = {}
+        for index,  activity_consumer in enumerate(self.activty_environment.get_activity_consumers()):
+            self.activity_consumer_dict['activity_consumer_{}'.format(index)] = activity_consumer
 
         #TODO: Check initialization of prev_energy
         self.prev_energy = np.zeros(10)
@@ -306,6 +311,13 @@ class SocialGameEnv(gym.Env):
             energy_consumptions[player_name] = player_energy
             total_consumption += player_energy
 
+        # compute demand from activity players
+        demand_by_activity_consumer = self.activty_environment.restore_execute_aggregate(action)
+        for activity_consumer_name,  activity_consumer in self.activity_consumer_dict:
+            consumer_energy = demand_by_activity_consumer[activity_consumer]
+            energy_consumptions[activity_consumer_name] = consumer_energy
+            total_consumption += consumer_energy
+
         energy_consumptions["avg"] = total_consumption / self.number_of_participants
         return energy_consumptions
 
@@ -327,21 +339,32 @@ class SocialGameEnv(gym.Env):
         total_energy_cost = 0
         for player_name in energy_consumptions:
             if player_name != "avg":
-                # get the points output from players
-                player = self.player_dict[player_name]
+                if player_name.startswith("player"):
+                    # get the points output from players
+                    player = self.player_dict[player_name]
 
-                # get the reward from the player's output
-                player_min_demand = player.get_min_demand()
-                player_max_demand = player.get_max_demand()
-                player_energy = energy_consumptions[player_name]
+                    # get the reward from the player's output
+                    player_min_demand = player.get_min_demand()
+                    player_max_demand = player.get_max_demand()
+
+                    player_energy = energy_consumptions[player_name]
+
+                elif player_name.startswith("activity_consumer"):
+                    player = self.activity_consumer_dict[player_name]
+
+                    player_energy = energy_consumptions[player_name]
+                    player_min_demand = np.amin(player_energy)
+                    player_max_demand = np.amax(player_energy)
+    
+
                 player_energy_cost = np.dot(player_energy, price)
                 player_reward = Reward(player_energy, price, player_min_demand, player_max_demand)
                 if reward_function == "scaled_cost_distance":
-                   player_ideal_demands = player_reward.ideal_use_calculation()
-                   reward = player_reward.scaled_cost_distance(player_ideal_demands)
+                    player_ideal_demands = player_reward.ideal_use_calculation()
+                    reward = player_reward.scaled_cost_distance(player_ideal_demands)
 
                 elif reward_function == "log_cost_regularized":
-                   reward = player_reward.log_cost_regularized()
+                    reward = player_reward.log_cost_regularized()
 
                 elif reward_function == "log_cost":
                     reward = player_reward.log_cost()
@@ -352,6 +375,9 @@ class SocialGameEnv(gym.Env):
 
                 total_energy_reward += reward
                 total_energy_cost += player_energy_cost
+
+
+
         total_energy_reward = total_energy_reward / self.number_of_participants
 
         if self.use_smirl:
@@ -508,213 +534,213 @@ class SocialGameEnvRLLib(SocialGameEnv):
         )
         print("Initialized RLLib child class")
 
-class SocialGameMetaEnv(SocialGameEnvRLLib):
+# class SocialGameMetaEnv(SocialGameEnvRLLib):
 
-    def __init__(self,
-        env_config,
-        task = None):
+#     def __init__(self,
+#         env_config,
+#         task = None):
 
-#        self.goal_direction = goal_direction if goal_direction else 1.0
+# #        self.goal_direction = goal_direction if goal_direction else 1.0
 
-        self.task = (task if task else {
-            "person_type":np.random.choice([DeterministicFunctionPerson, CurtailAndShiftPerson]),
-            "points_multiplier":np.random.choice(range(20)),
-            "response":np.random.choice(['t','l', 's']),
-            "shiftable_load_frac":np.random.uniform(0, 1),
-            "curtailable_load_frac":np.random.uniform(0, 1),
-            "shiftByHours":np.random.choice(range(8), ),
-            "maxCurtailHours":np.random.choice(range(8),)
-        })
+#         self.task = (task if task else {
+#             "person_type":np.random.choice([DeterministicFunctionPerson, CurtailAndShiftPerson]),
+#             "points_multiplier":np.random.choice(range(20)),
+#             "response":np.random.choice(['t','l', 's']),
+#             "shiftable_load_frac":np.random.uniform(0, 1),
+#             "curtailable_load_frac":np.random.uniform(0, 1),
+#             "shiftByHours":np.random.choice(range(8), ),
+#             "maxCurtailHours":np.random.choice(range(8),)
+#         })
 
-        super().__init__(
-            env_config=env_config,
-        )
+#         super().__init__(
+#             env_config=env_config,
+#         )
 
-        self.hours_in_day = 10
+#         self.hours_in_day = 10
 
-    def sample_tasks(self, n_tasks):
-        """
-        n_tasks will be passed in as a hyperparameter
-        """
-        # points_multiplier = 1,
-        # response = 't'
-        # baseline_energy_df,
-        # points_multiplier = 1,
-        # shiftable_load_frac = .7,
-		# curtailable_load_frac = .4,
-        # shiftByHours = 3,
-        # maxCurtailHours=5,
-        # baseline_energy_df_variance =  # add random noise to the existing?
+#     def sample_tasks(self, n_tasks):
+#         """
+#         n_tasks will be passed in as a hyperparameter
+#         """
+#         # points_multiplier = 1,
+#         # response = 't'
+#         # baseline_energy_df,
+#         # points_multiplier = 1,
+#         # shiftable_load_frac = .7,
+# 		# curtailable_load_frac = .4,
+#         # shiftByHours = 3,
+#         # maxCurtailHours=5,
+#         # baseline_energy_df_variance =  # add random noise to the existing?
 
-        person_type = np.random.choice([DeterministicFunctionPerson, CurtailAndShiftPerson], size = (n_tasks, ))
-        points_multiplier = np.random.choice(range(20), size = (n_tasks, ))
-        response = np.random.choice(['t','l', 's'], size = (n_tasks, ))
-        shiftable_load_frac = np.random.uniform(0, 1, size = (n_tasks, ))
-        curtailable_load_frac = np.random.uniform(0, 1, size = (n_tasks, ))
-        shiftByHours = np.random.choice(range(8), (n_tasks, ))
-        maxCurtailHours=np.random.choice(range(8), (n_tasks, ))
+#         person_type = np.random.choice([DeterministicFunctionPerson, CurtailAndShiftPerson], size = (n_tasks, ))
+#         points_multiplier = np.random.choice(range(20), size = (n_tasks, ))
+#         response = np.random.choice(['t','l', 's'], size = (n_tasks, ))
+#         shiftable_load_frac = np.random.uniform(0, 1, size = (n_tasks, ))
+#         curtailable_load_frac = np.random.uniform(0, 1, size = (n_tasks, ))
+#         shiftByHours = np.random.choice(range(8), (n_tasks, ))
+#         maxCurtailHours=np.random.choice(range(8), (n_tasks, ))
 
-        task_parameters = {
-            "person_type":person_type,
-            "points_multiplier":points_multiplier,
-            "response":response,
-            "shiftable_load_frac":shiftable_load_frac,
-            "curtailable_load_frac":curtailable_load_frac,
-            "shiftByHours":shiftByHours,
-            "maxCurtailHours":maxCurtailHours
-        }
+#         task_parameters = {
+#             "person_type":person_type,
+#             "points_multiplier":points_multiplier,
+#             "response":response,
+#             "shiftable_load_frac":shiftable_load_frac,
+#             "curtailable_load_frac":curtailable_load_frac,
+#             "shiftByHours":shiftByHours,
+#             "maxCurtailHours":maxCurtailHours
+#         }
 
-        tasks_dicts = []
-        for i in range(n_tasks):
-            temp_dict = {k: v[i] for k, v in task_parameters.items()}
-            tasks_dicts.append(temp_dict)
+#         tasks_dicts = []
+#         for i in range(n_tasks):
+#             temp_dict = {k: v[i] for k, v in task_parameters.items()}
+#             tasks_dicts.append(temp_dict)
 
-        return task_dicts
-
-
-    def set_task(self, task):
-        """
-        Args:
-            task: task of the meta-learning environment
-        """
-        self.task=task
-        # self.person_type = task["person_type"]
-        # self.points_multiplier = task["points_multiplier"]
-        # self.response = task["response"]
-        # self.shiftable_load_frac = task["shiftable_load_frac"]
-        # self.curtailable_load_frac = task["curtailable_load_frac"]
-        # self.shiftByHours = task["shiftByHours"]
-        # self.maxCurtailHours = task["maxCurtailHours"]
-
-    def get_task(self):
-        """
-        Returns:
-            task: task of the meta-learning environment
-        """
-        return self.task
+#         return task_dicts
 
 
-    def _create_agents(self):
-        """
-        Purpose: Create the participants of the social game. We create a game with n players, where n = self.number_of_participants
-        This function has been modified to create a variety of people environments to work with MAML
+#     def set_task(self, task):
+#         """
+#         Args:
+#             task: task of the meta-learning environment
+#         """
+#         self.task=task
+#         # self.person_type = task["person_type"]
+#         # self.points_multiplier = task["points_multiplier"]
+#         # self.response = task["response"]
+#         # self.shiftable_load_frac = task["shiftable_load_frac"]
+#         # self.curtailable_load_frac = task["curtailable_load_frac"]
+#         # self.shiftByHours = task["shiftByHours"]
+#         # self.maxCurtailHours = task["maxCurtailHours"]
 
-        Args:
-            None
-
-        Returns:
-              agent_dict: Dictionary of players, each with response function based on self.response_type_string
-
-        """
-
-        player_dict = {}
-
-        # Sample Energy from average energy in the office (pre-treatment) from the last experiment
-        # Reference: Lucas Spangher, et al. Engineering  vs.  ambient  typevisualizations:  Quantifying effects of different data visualizations on energy consumption. 2019
-
-        sample_energy = np.array([ 0.28,  11.9,   16.34,  16.8,  17.43,  16.15,  16.23,  15.88,  15.09,  35.6,
-                                123.5,  148.7,  158.49, 149.13, 159.32, 157.62, 158.8,  156.49, 147.04,  70.76,
-                                42.87,  23.13,  22.52,  16.8 ])
-
-        #only grab working hours (8am - 5pm)
-        working_hour_energy = sample_energy[8:18] ### this needs to be changed for 18 hours!!!!!
-        my_baseline_energy = pd.DataFrame(data = {"net_energy_use" : working_hour_energy})
-        for i in range(self.number_of_participants):
-            player = self.task["person_type"](baseline_energy_df = my_baseline_energy, **self.task)
-            player_dict['player_{}'.format(i)] = player
-
-        return player_dict
+#     def get_task(self):
+#         """
+#         Returns:
+#             task: task of the meta-learning environment
+#         """
+#         return self.task
 
 
-class SocialGameEnvRLLibPlanning(SocialGameEnvRLLib):
-    def __init__(self, env_config):
-        self.planning_steps = env_config["planning_steps"]
-        self.is_step_in_real=True
-        super().__init__(
-            env_config=env_config,
-        )
+#     def _create_agents(self):
+#         """
+#         Purpose: Create the participants of the social game. We create a game with n players, where n = self.number_of_participants
+#         This function has been modified to create a variety of people environments to work with MAML
+
+#         Args:
+#             None
+
+#         Returns:
+#               agent_dict: Dictionary of players, each with response function based on self.response_type_string
+
+#         """
+
+#         player_dict = {}
+
+#         # Sample Energy from average energy in the office (pre-treatment) from the last experiment
+#         # Reference: Lucas Spangher, et al. Engineering  vs.  ambient  typevisualizations:  Quantifying effects of different data visualizations on energy consumption. 2019
+
+#         sample_energy = np.array([ 0.28,  11.9,   16.34,  16.8,  17.43,  16.15,  16.23,  15.88,  15.09,  35.6,
+#                                 123.5,  148.7,  158.49, 149.13, 159.32, 157.62, 158.8,  156.49, 147.04,  70.76,
+#                                 42.87,  23.13,  22.52,  16.8 ])
+
+#         #only grab working hours (8am - 5pm)
+#         working_hour_energy = sample_energy[8:18] ### this needs to be changed for 18 hours!!!!!
+#         my_baseline_energy = pd.DataFrame(data = {"net_energy_use" : working_hour_energy})
+#         for i in range(self.number_of_participants):
+#             player = self.task["person_type"](baseline_energy_df = my_baseline_energy, **self.task)
+#             player_dict['player_{}'.format(i)] = player
+
+#         return player_dict
+
+
+# class SocialGameEnvRLLibPlanning(SocialGameEnvRLLib):
+#     def __init__(self, env_config):
+#         self.planning_steps = env_config["planning_steps"]
+#         self.is_step_in_real=True
+#         super().__init__(
+#             env_config=env_config,
+#         )
         
-    def _simulate_humans_planning_model(self, action):
-        """
-        Purpose: A planning model to wrap simulate_humans. 
+#     def _simulate_humans_planning_model(self, action):
+#         """
+#         Purpose: A planning model to wrap simulate_humans. 
 
-        Args:
-            Action: 10-dim vector corresponding to action for each hour 
+#         Args:
+#             Action: 10-dim vector corresponding to action for each hour 
 
-        Returns:
-            Energy_consumption: Dictionary containing the energy usage by player and the average energy 
-        """
+#         Returns:
+#             Energy_consumption: Dictionary containing the energy usage by player and the average energy 
+#         """
 
-        energy_consumptions = {}
-        total_consumption = np.zeros(10)
+#         energy_consumptions = {}
+#         total_consumption = np.zeros(10)
 
-        for player_name in self.player_dict:
-            #Get players response to agent's actions
-            player = self.player_dict[player_name]
+#         for player_name in self.player_dict:
+#             #Get players response to agent's actions
+#             player = self.player_dict[player_name]
 
-            player_energy = 86 + (5 * (action - 5)) ## need to change this baseline model
+#             player_energy = 86 + (5 * (action - 5)) ## need to change this baseline model
 
-            #Calculate energy consumption by player and in total (over the office)
-            energy_consumptions[player_name] = player_energy
-            total_consumption += player_energy
+#             #Calculate energy consumption by player and in total (over the office)
+#             energy_consumptions[player_name] = player_energy
+#             total_consumption += player_energy
 
-        energy_consumptions["avg"] = total_consumption / self.number_of_participants
-        return energy_consumptions
+#         energy_consumptions["avg"] = total_consumption / self.number_of_participants
+#         return energy_consumptions
 
-    def step(self, action):
-        """
-        Purpose: Takes a step in the environment
+#     def step(self, action):
+#         """
+#         Purpose: Takes a step in the environment
 
-        Args:
-            Action: 10-dim vector detailing player incentive for each hour (8AM - 5PM)
+#         Args:
+#             Action: 10-dim vector detailing player incentive for each hour (8AM - 5PM)
 
-        Returns:
-            Observation: State for the next day
-            Reward: Reward for said action
-            Done: Whether or not the day is done (should always be True b/c of 1-step trajectory)
-            Info: Other info (primarily for gym env based library compatibility)
+#         Returns:
+#             Observation: State for the next day
+#             Reward: Reward for said action
+#             Done: Whether or not the day is done (should always be True b/c of 1-step trajectory)
+#             Info: Other info (primarily for gym env based library compatibility)
 
-        Exceptions:
-            raises AssertionError if action is not in the action space
-        """
-        self.action = action
+#         Exceptions:
+#             raises AssertionError if action is not in the action space
+#         """
+#         self.action = action
 
-        if not self.action_space.contains(action):
-            print("made it within the if statement in SG_E that tests if the action space doesn't have the action")
-            action = np.asarray(action)
-            if self.action_space_string == 'continuous':
-                action = np.clip(action, -1, 1) #TODO: check if correct
+#         if not self.action_space.contains(action):
+#             print("made it within the if statement in SG_E that tests if the action space doesn't have the action")
+#             action = np.asarray(action)
+#             if self.action_space_string == 'continuous':
+#                 action = np.clip(action, -1, 1) #TODO: check if correct
 
-            elif self.action_space_string == 'multidiscrete':
-                action = np.clip(action, 0, self.action_subspace - 1)
+#             elif self.action_space_string == 'multidiscrete':
+#                 action = np.clip(action, 0, self.action_subspace - 1)
 
-        prev_price = self.prices[(self.day)]
-        self.day = (self.day + 1) % 365
-        self.curr_iter += 1
-        self.total_iter +=1
+#         prev_price = self.prices[(self.day)]
+#         self.day = (self.day + 1) % 365
+#         self.curr_iter += 1
+#         self.total_iter +=1
 
-        done = self.curr_iter > 0
+#         done = self.curr_iter > 0
 
-        points = self._points_from_action(action)
+#         points = self._points_from_action(action)
 
-        if not self.total_iter % (1 + self.planning_steps):
-            # take a step in real
-            self.is_step_in_real = True
-            energy_consumptions = self._simulate_humans(points)
-        else: 
-            # take a step in planning
-            self.is_step_in_real = False
-            energy_consumptions = self._simulate_humans_planning_model(points)
+#         if not self.total_iter % (1 + self.planning_steps):
+#             # take a step in real
+#             self.is_step_in_real = True
+#             energy_consumptions = self._simulate_humans(points)
+#         else: 
+#             # take a step in planning
+#             self.is_step_in_real = False
+#             energy_consumptions = self._simulate_humans_planning_model(points)
 
-        # HACK ALERT. USING AVG ENERGY CONSUMPTION FOR STATE SPACE. this will not work if people are not all the same
+#         # HACK ALERT. USING AVG ENERGY CONSUMPTION FOR STATE SPACE. this will not work if people are not all the same
 
-        self.prev_energy = energy_consumptions["avg"]
+#         self.prev_energy = energy_consumptions["avg"]
 
-        observation = self._get_observation()
-        reward = self._get_reward(prev_price, energy_consumptions, reward_function = self.reward_function)
+#         observation = self._get_observation()
+#         reward = self._get_reward(prev_price, energy_consumptions, reward_function = self.reward_function)
 
-        if self.use_smirl:
-            self.buffer.add(observation)
+#         if self.use_smirl:
+#             self.buffer.add(observation)
 
-        info = {}
-        return observation, reward, done, info
+#         info = {}
+#         return observation, reward, done, info

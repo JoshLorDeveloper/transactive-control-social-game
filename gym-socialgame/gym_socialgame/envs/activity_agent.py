@@ -1,8 +1,5 @@
 import pandas as pd
 import numpy as np
-from enum import Enum
-from collections.abc import Sequence
-from typing import Union, Callable
 import json
 
 class ActivityEnvironment:
@@ -22,12 +19,12 @@ class ActivityEnvironment:
 			for activity_consumer in self._activity_consumers:
 				activity_consumer.execute_step(energy_price_by_time, time_step)
 	
-	def compile_demand(self, for_times: np.ndarray = None):
+	def aggregate_demand(self, for_times: np.ndarray = None):
 		if for_times is None:
 			for_times = self._time_domain
 		demand_by_activity_consumer = {}
 		for activity_consumer in self._activity_consumers:
-			consumer_demand = activity_consumer.compile_demand(for_times)
+			consumer_demand = activity_consumer.aggregate_demand(for_times)
 			demand_by_activity_consumer[activity_consumer] = consumer_demand
 		return demand_by_activity_consumer
 
@@ -40,26 +37,29 @@ class ActivityEnvironment:
 		for activity_consumer in self._activity_consumers:
 			activity_consumer.restore()
 
-	def compile_execute(self, energy_prices, for_times: np.ndarray = None):
+	def execute_aggregate(self, energy_prices, for_times: np.ndarray = None):
 		if for_times is None:
 			for_times = self._time_domain
 		energy_prices_by_time = pd.Series(energy_prices, index = for_times)
 		self.execute(energy_prices_by_time)
-		result = self.compile_demand(for_times)
+		result = self.aggregate_demand(for_times)
 		return result
 
-	def restore_compile_execute(self, energy_prices, for_times: np.ndarray = None):
+	def restore_execute_aggregate(self, energy_prices, for_times: np.ndarray = None):
 		if for_times is None:
 			for_times = self._time_domain
 		self.restore()
-		result = self.compile_execute(energy_prices, for_times)
+		result = self.execute_aggregate(energy_prices, for_times)
 		return result
 
-	def build_compile_execute(energy_prices, source_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"):
-			new_env : ActivityEnvironment = ActivityEnvironment.build(source_file_name)
-			times = new_env._time_domain
-			result = new_env.compile_execute(energy_prices, times)
-			return result
+	def build_execute_aggregate(energy_prices, source_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"):
+		new_env : ActivityEnvironment = ActivityEnvironment.build(source_file_name)
+		times = new_env._time_domain
+		result = new_env.aggregate_execute(energy_prices, times)
+		return result
+
+	def get_activity_consumers(self):
+		return self._activity_consumers
 
 
 class ActivityConsumer:
@@ -150,10 +150,10 @@ class ActivityConsumer:
 		self._consumed_activities[activity] = time_step
 		activity.consume(time_step)
 
-	def compile_demand(self, for_times: np.ndarray):
+	def aggregate_demand(self, for_times: np.ndarray):
 		total_demand = pd.Series(np.full(len(for_times), 0, dtype = np.float64), index=for_times)
 		for activity, time_consumed in self._consumed_activities.items():
-			actvity_demand = activity.compile_demand(time_consumed, for_times, self)
+			actvity_demand = activity.aggregate_demand(time_consumed, for_times, self)
 			total_demand = total_demand.add(actvity_demand, fill_value=0)
 		return total_demand
 
@@ -222,7 +222,7 @@ class Activity:
 				new_active_values_by_time = active_values_by_time * local_effect_vector # change for increased complexity
 				for_consumer._activity_values[activity] = new_active_values_by_time
 
-	def compile_demand(self, time_consumed, for_times: np.ndarray, for_consumer: ActivityConsumer):
+	def aggregate_demand(self, time_consumed, for_times: np.ndarray, for_consumer: ActivityConsumer):
 		total_demand = pd.Series(np.full(len(for_times), 0, dtype = np.float64), index=for_times)
 		for demand_unit in self._demand_units:
 			demand_unit_total_demand = demand_unit.absolute_power_consumption_array(time_consumed, for_consumer)

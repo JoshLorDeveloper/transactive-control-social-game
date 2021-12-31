@@ -103,6 +103,7 @@ class SocialGameEnv(gym.Env):
 
         #Create Players
         self.player_dict = self._create_agents()
+        
         self.activty_environment : ActivityEnvironment = ActivityEnvironment.build()
         self.activity_consumer_dict = {}
         for index,  activity_consumer in enumerate(self.activty_environment.get_activity_consumers()):

@@ -14,7 +14,7 @@ Code meant to support and simulate the Social Game that will be launched in 2021
 ## Usage
 1. Run `./run.sh` from the root of the repo. This will put you in a shell in the docker container with the `rl_algos/logs` directory mounted
 2. Run `python3 ExperimentRunner.py sac test_experiment` in the docker container to start an experiment with the name `test_experiment`
-3. Run `tensorboard --logdir rl_algos/logs` from outside the docker container to view the logs
+3. Run `tensorboard --logdir logs --host localhost --port 8088` from outside the docker container to view the logs
 
 ### Issues
 If you're having trouble running docker or the `ExperimentRunner.py` file. Please try running `python ExperimentRunner.py` and debug from there. 

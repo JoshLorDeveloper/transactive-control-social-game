@@ -9,6 +9,13 @@ wandb/
 .dvc/cache/
 .vs-liveshare-keychain
 
+.bash_history
+.cache/
+.local/
+.npm/
+.python_history
+.viminfo
+
 __pycache__
 *.egg-info
 *.pem

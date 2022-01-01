@@ -19,6 +19,7 @@ def get_agent(args):
     """
     #### Algorithm: PPO ####
     if args.algo == "ppo":
+        print("used ppo")
         # Modify the default configs for PPO
         config = ray_ppo.DEFAULT_CONFIG.copy()
         config["framework"] = "torch"
@@ -258,7 +259,7 @@ if __name__ == "__main__":
     print(f"Running with following options: {args}")
 
     # ray.init(local_mode=args.local_mode)
-    # ray.init()
+    ray.init()
     # TODO
 
     # Uploading logs to wandb

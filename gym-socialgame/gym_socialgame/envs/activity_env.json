@@ -1,7 +1,7 @@
 {
 	"times" : {
 		"start": 1,
-		"stop": 100,
+		"stop": 11,
 		"interval": 1
 	},
 	"named_demand_units" : {
@@ -123,7 +123,7 @@
 					"7": 2
 				},
 				"b": { 
-					"15": 4
+					"8": 4
 				}
 			}
 		}

@@ -29,7 +29,7 @@ class ActivityEnvironment:
 		return demand_by_activity_consumer
 
 	def build(source_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"):
-		JsonActivityEnvironmentGenerator.generate_environment(source_file_name)
+		return JsonActivityEnvironmentGenerator.generate_environment(source_file_name)
 	
 	def restore(self):
 		for activity in self._activities:

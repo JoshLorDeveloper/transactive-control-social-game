@@ -105,7 +105,6 @@ class SocialGameEnv(gym.Env):
         self.player_dict = self._create_agents()
         
         self.activty_environment : ActivityEnvironment = ActivityEnvironment.build()
-        print("test", self.activty_environment)
         self.activity_consumer_dict = {}
         for index,  activity_consumer in enumerate(self.activty_environment.get_activity_consumers()):
             self.activity_consumer_dict['activity_consumer_{}'.format(index)] = activity_consumer
@@ -315,10 +314,10 @@ class SocialGameEnv(gym.Env):
 
         # compute demand from activity players
         demand_by_activity_consumer = self.activty_environment.restore_execute_aggregate(action)
-        for activity_consumer_name,  activity_consumer in self.activity_consumer_dict.items():
-            consumer_energy = demand_by_activity_consumer[activity_consumer]
-            energy_consumptions[activity_consumer_name] = consumer_energy
-            total_consumption += consumer_energy
+        # for activity_consumer_name,  activity_consumer in self.activity_consumer_dict.items():
+        #     consumer_energy = demand_by_activity_consumer[activity_consumer]
+        #     energy_consumptions[activity_consumer_name] = consumer_energy
+        #     total_consumption += consumer_energy
 
         energy_consumptions["avg"] = total_consumption / self.number_of_participants
         return energy_consumptions

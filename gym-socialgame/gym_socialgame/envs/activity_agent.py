@@ -77,8 +77,10 @@ class ActivityConsumer:
 		- consumed_activities   |   Dict from activity to time consumed
 	'''
 
-	def __init__(self, activity_values = None, activity_thresholds = None, demand_unit_price_factor = None, demand_unit_quantity_factor = None):
+	def __init__(self, name, activity_values = None, activity_thresholds = None, demand_unit_price_factor = None, demand_unit_quantity_factor = None):
 		
+		self.name = name
+
 		if activity_values is None:
 			if not hasattr(self, "_activity_values"):
 				self._activity_values = {}
@@ -139,8 +141,9 @@ class ActivityConsumer:
 		to_calculate_for_times = np.array([time_step])
 		for activity, active_value_by_time in self._activity_values.items():
 			if (not activity._consumed or activity._consumed is None):
-				price_effect = activity.price_effect_by_time(energy_price_by_time, to_calculate_for_times, self)
-				total_value_for_time = (active_value_by_time + (price_effect - price_effect.median()))[time_step]
+				price_effect_at_time = activity.price_effect_by_time(energy_price_by_time, to_calculate_for_times, self)
+				# normalized_price_effect = (price_effect[time_step] - price_effect.median())
+				total_value_for_time = active_value_by_time[time_step] + price_effect_at_time
 				threshold_for_time = self._activity_thresholds[activity][time_step]
 
 				if total_value_for_time > threshold_for_time:
@@ -204,11 +207,18 @@ class Activity:
 			self._effect_vectors = effect_vectors
 
 	def price_effect_by_time(self, energy_price_by_time, for_times: np.ndarray, for_consumer: ActivityConsumer) -> pd.Series:
-		total_price_effect = pd.Series(np.full(len(for_times), 0), index=for_times)
-		for demand_unit in self._demand_units:
-			price_effect = demand_unit.price_effect_by_time(energy_price_by_time, for_times, for_consumer)
-			total_price_effect = total_price_effect + price_effect
-		return total_price_effect
+		if len(for_times) == 1:
+			total = 0
+			for demand_unit in self._demand_units:
+				# adds price effect by time to total_price_effect
+				total += demand_unit.price_effect_by_time(energy_price_by_time, for_times, for_consumer)
+			return total
+		else:
+			total_price_effect = pd.Series(np.full(len(for_times), 0), index=for_times)
+			for demand_unit in self._demand_units:
+				# adds price effect by time to total_price_effect
+				demand_unit.price_effect_by_time(energy_price_by_time, for_times, for_consumer, total_price_effect)
+			return total_price_effect
 	
 	def consume(self, time_step):
 		self._consumed = time_step
@@ -244,11 +254,13 @@ class DemandUnit:
 	def __init__(self, power_consumption_by_time: pd.Series):
 		self._power_consumption_by_time = power_consumption_by_time
 
-	def price_effect_by_time(self, energy_price_by_time, for_times: np.ndarray, for_consumer: ActivityConsumer) -> pd.Series:
+	def price_effect_by_time(self, energy_price_by_time, for_times: np.ndarray, for_consumer: ActivityConsumer, for_return:pd.Series = None) -> pd.Series:
 
 		consumer_price_factor = for_consumer._demand_unit_price_factor[self]
 		consumer_quantity_factor = for_consumer._demand_unit_quantity_factor[self]
-		price_effects = []
+		
+		if for_return is None and len(for_times) != 1:
+			for_return = pd.Series(np.full(len(for_times), 0), index=for_times)
 
 		time_start = self._power_consumption_by_time.index[0]
 		for start_time_step in for_times:
@@ -262,9 +274,11 @@ class DemandUnit:
 					effect = power_consumed * energy_price_by_time[time_step] * consumer_price_factor[time_step]
 					total = total + effect
 			
-			price_effects.append(total)
+			if len(for_times) == 1:
+				return total
+			for_return[start_time_step] += total
 		
-		return pd.Series(price_effects, index=for_times)
+		return for_return
 	
 	def absolute_power_consumption_array(self, start_time_step, for_consumer: ActivityConsumer):
 		consumer_quantity_factor = for_consumer._demand_unit_quantity_factor[self]
@@ -327,7 +341,7 @@ class JsonActivityEnvironmentGenerator:
 			named_activity_consumers_data = json_data["activity_consumers"]
 			for activity_consumer_name, activity_consumer_data in named_activity_consumers_data.items():
 				if activity_consumer_name != "*":
-					new_activity_consumer = ActivityConsumer()
+					new_activity_consumer = ActivityConsumer(activity_consumer_name)
 					named_activity_consumers[activity_consumer_name] = new_activity_consumer
 			
 			activity_consumer_list = list(named_activity_consumers.values())

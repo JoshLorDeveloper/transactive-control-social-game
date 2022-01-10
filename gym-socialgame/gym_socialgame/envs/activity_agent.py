@@ -161,6 +161,7 @@ class ActivityConsumer:
 		return total_demand
 
 	def restore(self):
+		self._consumed_activities = {}
 		self._activity_values = ActivityConsumer.copy_activity_values(self._initial_activity_values)
 
 	def copy_activity_values(activity_values):

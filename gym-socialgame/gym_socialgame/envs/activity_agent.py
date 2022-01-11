@@ -15,6 +15,7 @@ class ActivityEnvironment:
 		self._time_domain = time_domain
   
 	def execute(self, energy_price_by_time: pd.Series):
+		energy_price_by_time = energy_price_by_time.subtract(energy_price_by_time.median())
 		for time_step in energy_price_by_time.index:
 			for activity_consumer in self._activity_consumers:
 				activity_consumer.execute_step(energy_price_by_time, time_step)

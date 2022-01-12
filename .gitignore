@@ -12,3 +12,11 @@ wandb/
 __pycache__
 *.egg-info
 *.pem
+
+.bash_history
+.cache/
+.local/
+.npm/
+.python_history
+.viminfo
+venv/

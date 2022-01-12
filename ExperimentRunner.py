@@ -263,7 +263,7 @@ if __name__ == "__main__":
 
     # Uploading logs to wandb
     if args.wandb:
-        wandb.init(project="energy-demand-response-game", entity="social-game-rl")
+        wandb.init(project="my-test-project", entity="joshlor")
         wandb.tensorboard.patch(root_logdir=args.log_path) # patching the logdir directly seems to work
         wandb.config.update(args)
 

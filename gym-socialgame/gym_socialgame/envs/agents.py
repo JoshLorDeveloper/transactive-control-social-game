@@ -353,13 +353,23 @@ class ActivityAgent(Person):
 
 	def get_response(self, points, day_of_week=None):
 		
+		# ensure that all None or False value of day_of_week results in 0
+		day_of_week_val = day_of_week or 0
+
 		# return answer from cache if exists
-		energy_prices_tuple = tuple(points)
-		if energy_prices_tuple in ActivityAgent.cache:
-			all_energy_resp =  self.cache[energy_prices_tuple]
-		else:	
-			all_energy_resp = self.activity_environment.restore_execute_aggregate(points)
-			self.cache[energy_prices_tuple] = all_energy_resp
+		run_identifier = (*points, day_of_week_val)
+		if run_identifier in ActivityAgent.cache:
+			all_energy_resp =  self.cache[run_identifier]
+		else:
+			# times computation
+			time_domain = self.activity_environment._time_domain
+			day_length = len(points)
+			time_step_offset = day_of_week_val * day_length
+			times = time_domain[(0 + time_step_offset) : (day_length + time_step_offset)]
+
+			# retrieve response from model
+			all_energy_resp = self.activity_environment.restore_execute_aggregate(points, times)
+			self.cache[run_identifier] = all_energy_resp
 		
 		energy_resp = all_energy_resp[self.activity_consumer]
 

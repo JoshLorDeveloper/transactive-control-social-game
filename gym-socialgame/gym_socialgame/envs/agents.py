@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import cvxpy as cvx
 from sklearn.preprocessing import MinMaxScaler
+from actvity_agent import ActivityEnvironment, ActivityConsumer
 
 #### file to make the simulation of people that we can work with 
 
@@ -224,7 +225,7 @@ class DeterministicFunctionPerson(Person):
 class RandomizedFunctionPerson(DeterministicFunctionPerson):
 	def __init__(self, baseline_energy_df, points_multiplier=1, response='t', low = 0, high = 50, distr = 'U'):
 	 
-	 """
+		"""
 		Adds Random Noise to DeterministicFunctionPerson energy output (for D.R. purposes)
 
 		New Args:
@@ -233,21 +234,21 @@ class RandomizedFunctionPerson(DeterministicFunctionPerson):
 			Distr = 'G' for Gaussian noise, 'U' for Uniform random noise (Note: Continuous distr.)
 
 		Note: For design purposes the random noise is updated at the end of each episode
-	 """
-	 #TODO: Multivariate distr??
+		"""
+		#TODO: Multivariate distr??
 
-	 super().__init__(baseline_energy_df, points_multiplier=points_multiplier, response=response)
-	 
-	 distr = distr.upper()
-	 assert distr in ['G', 'U']
+		super().__init__(baseline_energy_df, points_multiplier=points_multiplier, response=response)
+		
+		distr = distr.upper()
+		assert distr in ['G', 'U']
 
-	 self.response = response
-	 self.low = low
-	 self.high = high if high < self.max_demand else 50
-	 self.distr = distr
+		self.response = response
+		self.low = low
+		self.high = high if high < self.max_demand else 50
+		self.distr = distr
 
-	 self.noise = []
-	 self.update_noise()
+		self.noise = []
+		self.update_noise()
 
 	def update_noise(self):
 		if(self.distr == 'G'):
@@ -332,4 +333,37 @@ class CurtailAndShiftPerson(Person):
 		return energy_resp
 
 
+class ActivityAgent(Person):
 
+	def create_all(self, from_file = None):
+		activty_environment = ActivityEnvironment.build(from_file)
+		activity_consumer_dict = {}
+		for index,  activity_consumer in enumerate(activty_environment.get_activity_consumers()):
+			name = activity_consumer.name or 'activity_consumer_{}'.format(index)
+			activity_consumer_dict[name] = activity_consumer
+		return activity_consumer_dict
+
+	cache = {}
+	
+	def __init__(self, activity_consumer : ActivityConsumer, activity_environment : ActivityEnvironment, **kwargs):
+		self.activity_consumer = activity_consumer
+		self.activity_environment = activity_environment
+		self.min_demand = 0
+		self.max_demand = 100
+
+	def get_response(self, points, day_of_week=None):
+		
+		# return answer from cache if exists
+		energy_prices_tuple = tuple(points)
+		if energy_prices_tuple in ActivityAgent.cache:
+			all_energy_resp =  self.cache[energy_prices_tuple]
+		else:	
+			all_energy_resp = self.activity_environment.restore_execute_aggregate(points)
+			self.cache[energy_prices_tuple] = all_energy_resp
+		
+		energy_resp = all_energy_resp[self.activity_consumer]
+
+		self.min_demand = np.maximum(0, min(energy_resp))
+		self.max_demand = np.maximum(0, max(energy_resp))
+
+		return energy_resp

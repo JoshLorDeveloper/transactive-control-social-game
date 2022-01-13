@@ -357,7 +357,7 @@ class ActivityAgent(Person):
 		day_of_week_val = day_of_week or 0
 
 		# return answer from cache if exists
-		run_identifier = (*points, day_of_week_val)
+		run_identifier = (*points, day_of_week_val, id(self.activity_consumer))
 		if run_identifier in ActivityAgent.cache:
 			all_energy_resp =  self.cache[run_identifier]
 		else:
@@ -369,6 +369,8 @@ class ActivityAgent(Person):
 
 			# retrieve response from model
 			all_energy_resp = self.activity_environment.restore_execute_aggregate(points, times)
+
+			# cache the response from the model
 			self.cache[run_identifier] = all_energy_resp
 		
 		energy_resp = all_energy_resp[self.activity_consumer]

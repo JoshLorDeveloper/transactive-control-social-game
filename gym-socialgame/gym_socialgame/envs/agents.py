@@ -335,7 +335,7 @@ class CurtailAndShiftPerson(Person):
 
 class ActivityAgent(Person):
 
-	def create_all(self, from_file = None):
+	def create_all(from_file = None):
 		activty_environment = ActivityEnvironment.build(from_file)
 		activity_consumer_dict = {}
 		for index,  activity_consumer in enumerate(activty_environment.get_activity_consumers()):

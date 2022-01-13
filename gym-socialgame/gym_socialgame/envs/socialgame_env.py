@@ -101,6 +101,7 @@ class SocialGameEnv(gym.Env):
         self.action_space = self._create_action_space()
 
         #Create Players
+        self.activity_agent_source = ActivityAgent.create_all()
         self.player_dict = self._create_agents()
 
         #TODO: Check initialization of prev_energy
@@ -202,8 +203,12 @@ class SocialGameEnv(gym.Env):
         my_baseline_energy = pd.DataFrame(data = {"net_energy_use" : working_hour_energy})
 
         for i in range(self.number_of_participants):
-            player = CurtailAndShiftPerson(my_baseline_energy, points_multiplier = 10, response = 'l')
-            player_dict['player_{}'.format(i)] = player
+            if len(self.activity_agent_source) > 0:
+                name, activity_player = self.activity_agent_source.popitem()
+                player_dict['activity_player_{}'.format(name)] = activity_player
+            else:
+                player = CurtailAndShiftPerson(my_baseline_energy, points_multiplier = 10, response = 'l')
+                player_dict['player_{}'.format(i)] = player
 
         return player_dict
 

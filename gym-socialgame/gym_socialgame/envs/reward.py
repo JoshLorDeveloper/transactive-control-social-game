@@ -20,8 +20,8 @@ class Reward():
 		self.energy_use = np.array(energy_use)
 		self.prices = np.array(prices)
 		self._num_timesteps = energy_use.shape[0]
-		self.min_demand = np.min(energy_use) # min_demand
-		self.max_demand = np.max(energy_use) # max_demand
+		self.min_demand = np.maximum(0, min(energy_use)) # min_demand
+		self.max_demand = np.maximum(1, max(energy_use)) # max_demand
 		self.baseline_max_demand = 159.32
 
 		#assert round(self.max_demand) == round(max_demand), "The max demand that the player is using and the optimization is using is not the same"
@@ -91,15 +91,15 @@ class Reward():
 		:param: h - the hyperparameter that modifies the penalty on energy demand that's driven too low.
 
 		"""
-
 		scaler = MinMaxScaler(feature_range = (self.min_demand, self.max_demand))
 		## ?
 		scaled_energy = np.squeeze(scaler.fit_transform(self.energy_use.reshape(-1, 1)))
 
+		energy_price_factor = np.dot(scaled_energy, self.prices) or (self.max_demand * min(self.prices))
+		total_energy_use = np.sum(self.energy_use) or self.max_demand
 
-
-		return (-np.log(np.dot(scaled_energy, self.prices)) -
-			10 * (np.sum(self.energy_use) < (10 * (.5 * self.baseline_max_demand))))  # -
+		return (-np.log(energy_price_factor) -
+			10 * ( total_energy_use < (10 * (.5 * self.baseline_max_demand))))  # -
 			#10 * ())
 																			# sigmoid between 10 and 20 so there's a smooth transition
 																			# - lambd * (difference b/w energy(t)) - put a bound on

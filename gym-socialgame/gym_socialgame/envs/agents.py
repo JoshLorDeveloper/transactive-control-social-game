@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import cvxpy as cvx
 from sklearn.preprocessing import MinMaxScaler
-from actvity_agent import ActivityEnvironment, ActivityConsumer
+from gym_socialgame.envs.activity_agent import ActivityEnvironment, ActivityConsumer
 
 #### file to make the simulation of people that we can work with 
 
@@ -336,12 +336,12 @@ class CurtailAndShiftPerson(Person):
 class ActivityAgent(Person):
 
 	def create_all(from_file = None):
-		activty_environment = ActivityEnvironment.build(from_file)
-		activity_consumer_dict = {}
-		for index,  activity_consumer in enumerate(activty_environment.get_activity_consumers()):
+		activity_environment = ActivityEnvironment.build(from_file)
+		activity_agent_dict = {}
+		for index,  activity_consumer in enumerate(activity_environment.get_activity_consumers()):
 			name = activity_consumer.name or 'activity_consumer_{}'.format(index)
-			activity_consumer_dict[name] = activity_consumer
-		return activity_consumer_dict
+			activity_agent_dict[name] = ActivityAgent(activity_consumer, activity_environment)
+		return activity_agent_dict
 
 	cache = {}
 	
@@ -349,7 +349,7 @@ class ActivityAgent(Person):
 		self.activity_consumer = activity_consumer
 		self.activity_environment = activity_environment
 		self.min_demand = 0
-		self.max_demand = 100
+		self.max_demand = 1
 
 	def get_response(self, points, day_of_week=None):
 		
@@ -357,7 +357,7 @@ class ActivityAgent(Person):
 		day_of_week_val = day_of_week or 0
 
 		# return answer from cache if exists
-		run_identifier = (*points, day_of_week_val, id(self.activity_consumer))
+		run_identifier = (*points, day_of_week_val, id(self.activity_environment))
 		if run_identifier in ActivityAgent.cache:
 			all_energy_resp =  self.cache[run_identifier]
 		else:
@@ -376,6 +376,5 @@ class ActivityAgent(Person):
 		energy_resp = all_energy_resp[self.activity_consumer]
 
 		self.min_demand = np.maximum(0, min(energy_resp))
-		self.max_demand = np.maximum(0, max(energy_resp))
-
+		self.max_demand = np.maximum(1, max(energy_resp))
 		return energy_resp

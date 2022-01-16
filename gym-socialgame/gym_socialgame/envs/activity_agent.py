@@ -1,6 +1,19 @@
 import pandas as pd
 import numpy as np
 import json
+import random
+import string
+import argparse
+
+from pandas.core.arrays import boolean
+
+class Utilities:
+	def special_min(*args):
+		return min(i for i in args if i is not None)
+		
+	def series_add(base : pd.Series, addition : pd.Series):
+		for key, value in base.items():
+			base[key] = value + addition.get(key, default = 0)
 
 class ActivityEnvironment:
 	'''
@@ -153,14 +166,16 @@ class ActivityConsumer:
 					self.consume(time_step, activity)
 
 	def consume(self, time_step, activity):
+		# print("consumed", time_step, activity.name)
 		self._consumed_activities[activity] = time_step
 		activity.consume(time_step)
 
 	def aggregate_demand(self, for_times: np.ndarray):
 		total_demand = pd.Series(np.full(len(for_times), 0, dtype = np.float64), index=for_times)
 		for activity, time_consumed in self._consumed_activities.items():
-			actvity_demand = activity.aggregate_demand(time_consumed, for_times, self)
-			total_demand = total_demand.add(actvity_demand, fill_value=0)
+			activity_demand = activity.aggregate_demand(time_consumed, for_times, self)
+			Utilities.series_add(total_demand, activity_demand)
+			# total_demand = total_demand.add(activity_demand, fill_value=0)
 		return total_demand
 
 	def restore(self):
@@ -183,7 +198,8 @@ class Activity:
 		- consumed
 	'''
 	
-	def __init__(self, demand_units = None, effect_vectors = None):
+	def __init__(self, name, demand_units = None, effect_vectors = None):
+		self.name = name
 		if demand_units is None:
 			if not hasattr(self, "_demand_units"):
 				self._demand_units = []
@@ -240,7 +256,8 @@ class Activity:
 		total_demand = pd.Series(np.full(len(for_times), 0, dtype = np.float64), index=for_times)
 		for demand_unit in self._demand_units:
 			demand_unit_total_demand = demand_unit.absolute_power_consumption_array(time_consumed, for_consumer)
-			total_demand = total_demand.add(demand_unit_total_demand, fill_value=0)
+			Utilities.series_add(total_demand, demand_unit_total_demand)
+			# total_demand = total_demand.add(demand_unit_total_demand, fill_value=0)
 		return total_demand
 	
 	def restore(self):
@@ -287,17 +304,17 @@ class DemandUnit:
 	def absolute_power_consumption_array(self, start_time_step, for_consumer: ActivityConsumer):
 		consumer_quantity_factor = for_consumer._demand_unit_quantity_factor[self]
 		power_consumed_by_time = []
-		
 		time_start = self._power_consumption_by_time.index[0]
 		for time_step_absolute, power_consumption in self._power_consumption_by_time.items():
 			time_step_delta = time_step_absolute - time_start
 			time_step = start_time_step + time_step_delta
-			power_consumed = power_consumption / consumer_quantity_factor[time_step]
-			power_consumed_by_time.append(power_consumed)
+			if time_step in consumer_quantity_factor:
+				power_consumed = power_consumption / consumer_quantity_factor[time_step]
+				power_consumed_by_time.append(power_consumed)
 
-		absolute_times = self._power_consumption_by_time.index + start_time_step
+		absolute_times = self._power_consumption_by_time.index + start_time_step  - time_start
 
-		return pd.Series(power_consumed_by_time, index=absolute_times)
+		return pd.Series(power_consumed_by_time, index=absolute_times[:len(power_consumed_by_time)])
 
 def remove_key_return(original, key, default = None):
 	shallow_copy = dict(original)
@@ -334,7 +351,7 @@ class JsonActivityEnvironmentGenerator:
 			named_activities_data = json_data["activities"]
 			for activity_name, activity_data in named_activities_data.items():
 				if activity_name != "*":
-					new_activity = Activity()
+					new_activity = Activity(activity_name)
 					named_activities[activity_name] = new_activity
 
 			activity_list = list(named_activities.values())
@@ -578,3 +595,194 @@ class JsonActivityEnvironmentGenerator:
 			else:
 				series_values.append(value_to_generalize)
 		return series_values
+
+class JSONFileAutomator:
+	def edit_file(json_file_name = None, reset_param = False):
+
+		if json_file_name is None:
+			json_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"
+
+		with open(json_file_name, "a+") as json_file:
+			#return to start of file
+			json_file.seek(0)
+
+			activity_env_data = json.load(json_file)
+
+			demand_unit_dict = JSONFileAutomator.generate_demand_units_data(20, demand_units_data = activity_env_data["named_demand_units"], reset = reset_param)
+
+			old_activities_data = activity_env_data["activities"]
+			old_activities_names = list(old_activities_data.keys())
+			new_activities_names = JSONFileAutomator.generate_activities_names(20, activities_names = old_activities_names, reset = reset_param)
+			all_activities_names = [*old_activities_names, *new_activities_names]
+
+			old_activity_consumers_data = activity_env_data["activity_consumers"]
+			old_activity_consumers_names = list(old_activity_consumers_data.keys())
+			new_activity_consumers_names = JSONFileAutomator.generate_activity_consumers_names(8, activity_consumers_names = old_activity_consumers_names, reset = reset_param)
+			all_activity_consumers_names = [*old_activity_consumers_names, *new_activity_consumers_names]
+
+			activity_env_data["named_demand_units"] = demand_unit_dict
+			activity_env_data["activities"] = JSONFileAutomator.generate_activities_data(new_activities_names, list(demand_unit_dict.keys()), all_activity_consumers_names, old_activities_data, reset = reset_param)
+			activity_env_data["activity_consumers"] = JSONFileAutomator.generate_activity_consumers_data(new_activity_consumers_names, list(demand_unit_dict.keys()), all_activities_names, old_activity_consumers_data, reset = reset_param)
+
+		with open(json_file_name, "w") as json_file:
+			json.dump(activity_env_data, json_file, ensure_ascii=False, indent=4)
+	
+	def generate_demand_units_data(num, demand_units_data = {}, min_length = 1, max_length = 5, min_demand = 0, max_demand = 200, reset = False):
+		if reset:
+			demand_units_data = {}
+		for i in range(0, max(0, num - len(demand_units_data))):
+			demand_unit_length = random.randint(min_length, max_length)
+			letters = string.octdigits
+			demand_unit_name = ''.join(random.choice(letters) for i in range(3))
+			demand_unit_data = [float(random.randint(min_demand * 100, max_demand * 100)) / 100 for i in range(demand_unit_length)]
+			demand_units_data[demand_unit_name] = demand_unit_data
+		
+		return demand_units_data
+
+	def generate_activities_names(num, activities_names = [], reset = False):
+		if reset:
+			activities_names = []
+		new_activities_names = []
+		for i in range(0, max(0, num - len(activities_names))):
+			letters = string.ascii_lowercase
+			activity_name = ''.join(random.choice(letters) for i in range(3))
+			new_activities_names.append(activity_name)
+
+		return new_activities_names
+
+	def generate_activities_data(new_activities_names, demand_units_names, activity_consumer_names, activities_data = {}, 
+								min_demand_units = 1, max_demand_units = 4,
+								min_activities = 0, max_activities = None,
+								min_activity_consumers = 0, max_activity_consumers = None,
+								min_effect = 0, max_effect = 10, mode_effect = 1, longest_effect_time_length = 10, reset = False):
+		if reset:
+			if "*" in activities_data:
+				activities_data = {"*": activities_data["*"]}
+			else:
+				activities_data = {}
+		all_activities_names = [*list(activities_data.keys()), *new_activities_names]
+		for new_activity_name in new_activities_names:
+			new_activity_data = {}
+
+			num_demand_units = random.randint(min_demand_units, min(max_demand_units, len(demand_units_names)))
+			activity_demand_unit_names = random.sample(demand_units_names, num_demand_units)
+			new_activity_data["demand_units"] = activity_demand_unit_names
+
+			effect_vector_data = {}
+
+			effect_consumers_num = random.randint(min_activity_consumers, Utilities.special_min(max_activity_consumers, len(activity_consumer_names)))
+			effect_consumer_names = random.sample(activity_consumer_names, effect_consumers_num)
+			for consumer_name in effect_consumer_names:
+				activity_effects = {}
+
+				effect_activities_num = random.randint(min_activities, Utilities.special_min(max_activities, len(all_activities_names)))
+				effect_activities_names = random.sample(all_activities_names, effect_activities_num)
+				for activity_name in effect_activities_names:
+					effect_times_num = random.randint(0, longest_effect_time_length - 1)
+					effect_times_descriptors = sorted(random.sample(range(0, longest_effect_time_length), effect_times_num))
+					effect_times_values = np.random.triangular(min_effect, mode_effect, max_effect, size = effect_times_num).round(decimals = 3)
+
+					activity_effects[activity_name] = pd.Series(effect_times_values, index = effect_times_descriptors).to_dict()
+
+				effect_vector_data[consumer_name] = activity_effects
+
+			new_activity_data["effect_vectors"] = effect_vector_data
+
+			activities_data[new_activity_name] = new_activity_data
+
+		return activities_data
+
+	def generate_activity_consumers_names(num, activity_consumers_names = [], reset = False):
+		if reset:
+			activity_consumers_names = []
+		new_activity_consumers_names = []
+		for i in range(0, max(0, num - len(activity_consumers_names))):
+			letters = string.ascii_uppercase
+			activity_consumer_name = ''.join(random.choice(letters) for i in range(3))
+			new_activity_consumers_names.append(activity_consumer_name)
+
+		return new_activity_consumers_names
+
+	def generate_activity_consumers_data(new_consumers_names, demand_units_names, activities_names, activity_consumers_data = {},
+										min_activities = 0, max_activities = None,
+										min_demand_units = 0, max_demand_units = None,
+								 		min_activity_value = 0, max_activity_value = 4, mode_activity_value = 1,
+								 		min_activity_threshold = 0, max_activity_threshold = 10, mode_activity_threshold = 3,
+								 		min_demand_unit_price_factor = 0, max_demand_unit_price_factor = 4, mode_demand_unit_price_factor = 1,
+								 		min_demand_unit_quantity_factor = 0, max_demand_unit_quantity_factor = 2, mode_demand_unit_quantity_factor = 1,
+										longest_effect_time_length = 10, reset = False):
+		if reset:
+			if "*" in activity_consumers_data:
+				activity_consumers_data = {"*": activity_consumers_data["*"]}
+			else:
+				activity_consumers_data = {}
+		all_activity_consumers_names = new_consumers_names.extend(list(activity_consumers_data.keys()))
+		for new_consumer_name in new_consumers_names:
+			new_consumer_data = {}
+
+			# set activity values
+			activity_values_data = {}
+			effect_activities_values_num = random.randint(min_activities, Utilities.special_min(len(activities_names), max_activities))
+			effect_activities_values_names = random.sample(activities_names, effect_activities_values_num)
+			for activity_name in effect_activities_values_names:
+				effect_times_num = random.randint(0, longest_effect_time_length - 1)
+				effect_times_descriptors = sorted(random.sample(range(0, longest_effect_time_length), effect_times_num))
+				effect_times_values = np.random.triangular(min_activity_value, mode_activity_value, max_activity_value, size = effect_times_num).round(decimals = 3)
+
+				activity_values_data[activity_name] = pd.Series(effect_times_values, index = effect_times_descriptors).to_dict()
+
+			new_consumer_data["activity_values"] = activity_values_data
+
+			# set activity thresholds
+			activity_thresholds_data = {}
+			effect_activities_thresholds_num = random.randint(min_activities, Utilities.special_min(len(activities_names), max_activities))
+			effect_activities_thresholds_names = random.sample(activities_names, effect_activities_thresholds_num)
+			for activity_name in effect_activities_thresholds_names:
+				effect_times_num = random.randint(0, longest_effect_time_length - 1)
+				effect_times_descriptors = sorted(random.sample(range(0, longest_effect_time_length), effect_times_num))
+				effect_times_values = np.random.triangular(min_activity_threshold, mode_activity_threshold, max_activity_threshold, size = effect_times_num).round(decimals = 3)
+
+				activity_thresholds_data[activity_name] = pd.Series(effect_times_values, index = effect_times_descriptors).to_dict()
+
+			new_consumer_data["activity_thresholds"] = activity_thresholds_data
+
+			# set demand unit price factor
+			demand_unit_price_factor_data = {}
+			effect_demand_unit_price_factor_num = random.randint(min_demand_units, Utilities.special_min(len(demand_units_names), max_demand_units))
+			effect_demand_unit_price_factor_names = random.sample(demand_units_names, effect_demand_unit_price_factor_num)
+			for demand_unit_name in effect_demand_unit_price_factor_names:
+				effect_times_num = random.randint(0, longest_effect_time_length - 1)
+				effect_times_descriptors = sorted(random.sample(range(0, longest_effect_time_length), effect_times_num))
+				effect_times_values = np.random.triangular(min_demand_unit_price_factor, mode_demand_unit_price_factor, max_demand_unit_price_factor, size = effect_times_num).round(decimals = 3)
+
+				demand_unit_price_factor_data[demand_unit_name] = pd.Series(effect_times_values, index = effect_times_descriptors).to_dict()
+
+			new_consumer_data["demand_unit_price_factor"] = demand_unit_price_factor_data
+
+			# set demand unit quantity factor
+			demand_unit_quantity_factor_data = {}
+			effect_demand_unit_quantity_factor_num = random.randint(min_demand_units, Utilities.special_min(len(demand_units_names), max_demand_units))
+			effect_demand_unit_quantity_factor_names = random.sample(demand_units_names, effect_demand_unit_quantity_factor_num)
+			for demand_unit_name in effect_demand_unit_quantity_factor_names:
+				effect_times_num = random.randint(0, longest_effect_time_length - 1)
+				effect_times_descriptors = sorted(random.sample(range(0, longest_effect_time_length), effect_times_num))
+				effect_times_values = np.random.triangular(min_demand_unit_quantity_factor, mode_demand_unit_quantity_factor, max_demand_unit_quantity_factor, size = effect_times_num).round(decimals = 3)
+
+				demand_unit_quantity_factor_data[demand_unit_name] = pd.Series(effect_times_values, index = effect_times_descriptors).to_dict()
+
+			new_consumer_data["demand_unit_price_factor"] = demand_unit_quantity_factor_data
+
+
+			activity_consumers_data[new_consumer_name] = new_consumer_data
+
+		return activity_consumers_data
+
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser("reset_args")
+	parser.add_argument("-f", "--file", help="The file name.")
+	parser.add_argument("-r", "--reset", help="Whether file should be reset.", action="store_true")
+	args = parser.parse_args()
+	file_param = args.file
+	reset_param = args.reset
+	JSONFileAutomator.edit_file(json_file_name = file_param, reset_param = reset_param)
+		

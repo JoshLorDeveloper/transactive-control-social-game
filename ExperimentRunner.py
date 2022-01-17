@@ -5,6 +5,8 @@ import os
 import wandb
 import utils
 from custom_callbacks import CustomCallbacks
+from shutil import copyfile
+from gym_socialgame.envs.activity_agent import (JSONFileAutomator)
 
 import ray
 import ray.rllib.agents.ppo as ray_ppo
@@ -205,6 +207,16 @@ parser.add_argument(
     type=float,
     default=3e-4,
 )
+parser.add_argument(
+    "--new_agents",
+    help="Whether to create new agents and store in file.",
+    action="store_true"
+)
+parser.add_argument(
+    "--keep_json",
+    help="Whether to save the json file when running the activity agent.",
+    action="store_true"
+)
 # Logging Arguments
 parser.add_argument(
     "-w",
@@ -264,6 +276,11 @@ if __name__ == "__main__":
     # Uploading logs to wandb
     if args.wandb:
         wandb.init(project="my-test-project", entity="joshlor")
+        if args.new_agents:
+            JSONFileAutomator.edit_file(reset_param = True) 
+        if args.keep_json:
+            folder_location = "gym-socialgame/gym_socialgame/envs/activity_environments/{file_name}"
+            copyfile(folder_location.format(file_name = "activity_env.json"), folder_location.format(file_name = (wandb.run.name + ".json"))) 
         wandb.tensorboard.patch(root_logdir=args.log_path) # patching the logdir directly seems to work
         wandb.config.update(args)
 

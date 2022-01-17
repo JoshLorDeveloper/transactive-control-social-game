@@ -1,0 +1,44 @@
+{
+    "times": {
+        "start": 1,
+        "stop": 11,
+        "interval": 1
+    },
+	"named_demand_units": {},
+    "activities": {
+        "*": {
+            "demand_units": [],
+            "effect_vectors": {
+                "*": {
+                    "*": {
+                        "*": 1
+                    }
+                }
+            }
+        }
+    },
+	"activity_consumers": {
+        "*": {
+            "activity_values": {
+                "*": {
+                    "*": 1
+                }
+            },
+            "activity_thresholds": {
+                "*": {
+                    "*": 2
+                }
+            },
+            "demand_unit_price_factors": {
+                "*": {
+                    "*": 1
+                }
+            },
+            "demand_unit_quantity_factors": {
+                "*": {
+                    "*": 1
+                }
+            }
+        }
+	}
+}

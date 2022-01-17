@@ -3,6 +3,7 @@ import numpy as np
 import json
 import random
 import string
+import os
 import argparse
 
 from pandas.core.arrays import boolean
@@ -44,7 +45,7 @@ class ActivityEnvironment:
 
 	def build(source_file_name = None):
 		if source_file_name is None:
-			source_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"
+			source_file_name = "gym-socialgame/gym_socialgame/envs/activity_environments/activity_env.json"
 		return JsonActivityEnvironmentGenerator.generate_environment(source_file_name)
 	
 	def restore(self):
@@ -68,7 +69,7 @@ class ActivityEnvironment:
 		result = self.execute_aggregate(energy_prices, for_times)
 		return result
 
-	def build_execute_aggregate(energy_prices, source_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"):
+	def build_execute_aggregate(energy_prices, source_file_name = "gym-socialgame/gym_socialgame/envs/activity_environments/activity_env.json"):
 		new_env : ActivityEnvironment = ActivityEnvironment.build(source_file_name)
 		times = new_env._time_domain
 		result = new_env.aggregate_execute(energy_prices, times)
@@ -244,13 +245,15 @@ class Activity:
 		self._consumed = time_step
 		for for_consumer, effect_vectors_by_activity in self._effect_vectors.items():
 			for activity, effect_vector in effect_vectors_by_activity.items():
-				# generate effect vector
-				local_effect_vector = effect_vector.copy(deep=True)
-				local_effect_vector.index = local_effect_vector.index + time_step # Add time delta to start time, note: all need to be timestamps and time deltas or all floats
-				# change active values of activity by time for activity consumer
 				active_values_by_time = for_consumer._activity_values[activity]
-				new_active_values_by_time = active_values_by_time * local_effect_vector # change for increased complexity
-				for_consumer._activity_values[activity] = new_active_values_by_time
+				Activity.effect_active_values(time_step, active_values_by_time, effect_vector)
+
+	def effect_active_values(time_step, active_values_by_time, effect_vector):
+		for active_time, active_value in active_values_by_time.items():
+			effect_time = active_time - time_step
+			effect_val = effect_vector.get(effect_time, 1)
+			if effect_val != 1:
+				active_values_by_time[active_time] = active_value * effect_val
 
 	def aggregate_demand(self, time_consumed, for_times: np.ndarray, for_consumer: ActivityConsumer):
 		total_demand = pd.Series(np.full(len(for_times), 0, dtype = np.float64), index=for_times)
@@ -600,29 +603,33 @@ class JSONFileAutomator:
 	def edit_file(json_file_name = None, reset_param = False):
 
 		if json_file_name is None:
-			json_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"
+			json_file_name = "gym-socialgame/gym_socialgame/envs/activity_environments/activity_env.json"
 
 		with open(json_file_name, "a+") as json_file:
 			#return to start of file
 			json_file.seek(0)
 
-			activity_env_data = json.load(json_file)
+			if (os.stat(json_file_name).st_size != 0):
+				activity_env_data = json.load(json_file)
+			else:
+				with open("gym-socialgame/gym_socialgame/envs/activity_environments/base_env.json", "r") as base_json_file:
+					activity_env_data = json.load(base_json_file)
+			
+		demand_unit_dict = JSONFileAutomator.generate_demand_units_data(20, demand_units_data = activity_env_data.get("named_demand_units", {}), reset = reset_param)
 
-			demand_unit_dict = JSONFileAutomator.generate_demand_units_data(20, demand_units_data = activity_env_data["named_demand_units"], reset = reset_param)
+		old_activities_data = activity_env_data.get("activities", {})
+		old_activities_names = list(old_activities_data.keys())
+		new_activities_names = JSONFileAutomator.generate_activities_names(20, activities_names = old_activities_names, reset = reset_param)
+		all_activities_names = [*old_activities_names, *new_activities_names]
 
-			old_activities_data = activity_env_data["activities"]
-			old_activities_names = list(old_activities_data.keys())
-			new_activities_names = JSONFileAutomator.generate_activities_names(20, activities_names = old_activities_names, reset = reset_param)
-			all_activities_names = [*old_activities_names, *new_activities_names]
+		old_activity_consumers_data = activity_env_data.get("activity_consumers", {})
+		old_activity_consumers_names = list(old_activity_consumers_data.keys())
+		new_activity_consumers_names = JSONFileAutomator.generate_activity_consumers_names(8, activity_consumers_names = old_activity_consumers_names, reset = reset_param)
+		all_activity_consumers_names = [*old_activity_consumers_names, *new_activity_consumers_names]
 
-			old_activity_consumers_data = activity_env_data["activity_consumers"]
-			old_activity_consumers_names = list(old_activity_consumers_data.keys())
-			new_activity_consumers_names = JSONFileAutomator.generate_activity_consumers_names(8, activity_consumers_names = old_activity_consumers_names, reset = reset_param)
-			all_activity_consumers_names = [*old_activity_consumers_names, *new_activity_consumers_names]
-
-			activity_env_data["named_demand_units"] = demand_unit_dict
-			activity_env_data["activities"] = JSONFileAutomator.generate_activities_data(new_activities_names, list(demand_unit_dict.keys()), all_activity_consumers_names, old_activities_data, reset = reset_param)
-			activity_env_data["activity_consumers"] = JSONFileAutomator.generate_activity_consumers_data(new_activity_consumers_names, list(demand_unit_dict.keys()), all_activities_names, old_activity_consumers_data, reset = reset_param)
+		activity_env_data["named_demand_units"] = demand_unit_dict
+		activity_env_data["activities"] = JSONFileAutomator.generate_activities_data(new_activities_names, list(demand_unit_dict.keys()), all_activity_consumers_names, old_activities_data, reset = reset_param)
+		activity_env_data["activity_consumers"] = JSONFileAutomator.generate_activity_consumers_data(new_activity_consumers_names, list(demand_unit_dict.keys()), all_activities_names, old_activity_consumers_data, reset = reset_param)
 
 		with open(json_file_name, "w") as json_file:
 			json.dump(activity_env_data, json_file, ensure_ascii=False, indent=4)
@@ -716,7 +723,7 @@ class JSONFileAutomator:
 				activity_consumers_data = {"*": activity_consumers_data["*"]}
 			else:
 				activity_consumers_data = {}
-		all_activity_consumers_names = new_consumers_names.extend(list(activity_consumers_data.keys()))
+		all_activity_consumers_names = [*list(activity_consumers_data.keys()), *new_consumers_names]
 		for new_consumer_name in new_consumers_names:
 			new_consumer_data = {}
 

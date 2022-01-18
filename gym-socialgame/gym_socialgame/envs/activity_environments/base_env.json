@@ -1,8 +1,7 @@
 {
-    "times": {
-        "start": 1,
-        "stop": 11,
-        "interval": 1
+    "time_range": {
+        "length": 10,
+		"start_index": 0
     },
 	"named_demand_units": {},
     "activities": {
@@ -25,7 +24,7 @@
             },
             "demand_unit_price_factors": {
                 "*": {
-                    "*": 0.001
+                    "*": 0.005
                 }
             },
             "demand_unit_quantity_factors": {

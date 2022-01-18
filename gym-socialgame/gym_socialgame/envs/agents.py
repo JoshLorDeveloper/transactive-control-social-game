@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import cvxpy as cvx
 from sklearn.preprocessing import MinMaxScaler
-from gym_socialgame.envs.activity_agent import ActivityEnvironment, ActivityConsumer
+from gym_socialgame.envs.activity_agent import ActivityEnvironment, ActivityConsumer, ArrayRange
 
 #### file to make the simulation of people that we can work with 
 
@@ -362,13 +362,13 @@ class ActivityAgent(Person):
 			all_energy_resp =  self.cache[run_identifier]
 		else:
 			# times computation
-			time_domain = self.activity_environment._time_domain
+			# time_domain = self.activity_environment._time_domain
 			day_length = len(points)
 			time_step_offset = day_of_week_val * day_length
-			times = time_domain[(0 + time_step_offset) : (day_length + time_step_offset)]
+			time_range = ArrayRange(start_index = time_step_offset, length = day_length)
 
 			# retrieve response from model
-			all_energy_resp = self.activity_environment.restore_execute_aggregate(points, times)
+			all_energy_resp = self.activity_environment.restore_execute_aggregate(points, time_range)
 
 			# cache the response from the model
 			self.cache[run_identifier] = all_energy_resp

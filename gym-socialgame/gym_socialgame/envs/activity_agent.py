@@ -69,7 +69,7 @@ class ActivityEnvironment:
 
 	def build(source_file_name = None):
 		if source_file_name is None:
-			source_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"
+			source_file_name = "gym-socialgame/gym_socialgame/envs/activity_environments/activity_env.json"
 		return JsonActivityEnvironmentGenerator.generate_environment(source_file_name)
 	
 	def restore(self):
@@ -92,7 +92,7 @@ class ActivityEnvironment:
 		result = self.execute_aggregate(energy_prices, time_range)
 		return result
 
-	def build_execute_aggregate(energy_prices, source_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"):
+	def build_execute_aggregate(energy_prices, source_file_name = "gym-socialgame/gym_socialgame/envs/activity_environments/activity_env.json"):
 		new_env : ActivityEnvironment = ActivityEnvironment.build(source_file_name)
 		time_range = new_env._time_domain
 		result = new_env.aggregate_execute(energy_prices, time_range)
@@ -209,7 +209,7 @@ class ActivityConsumer:
 	def copy_activity_values(activity_values):
 		new_dict = {}
 		for activity, time_values in activity_values.items():
-			new_dict[activity] = time_values.copy(deep = True)
+			new_dict[activity] = time_values.copy()
 		return new_dict
 
 
@@ -762,7 +762,7 @@ class JSONFileAutomator:
 										min_demand_units = 0, max_demand_units = None,
 								 		min_activity_value = 0, max_activity_value = 4, mode_activity_value = 1,
 								 		min_activity_threshold = 0, max_activity_threshold = 10, mode_activity_threshold = 3,
-								 		min_demand_unit_price_factor = 0, max_demand_unit_price_factor = 0.01, mode_demand_unit_price_factor = 0.001,
+								 		min_demand_unit_price_factor = 0, max_demand_unit_price_factor = 0.015, mode_demand_unit_price_factor = 0.005,
 								 		min_demand_unit_quantity_factor = 0, max_demand_unit_quantity_factor = 2, mode_demand_unit_quantity_factor = 1,
 										longest_effect_time_length = 10, reset = False):
 		if reset:

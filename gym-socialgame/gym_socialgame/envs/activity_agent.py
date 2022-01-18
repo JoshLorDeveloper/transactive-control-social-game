@@ -715,7 +715,7 @@ class JSONFileAutomator:
 										min_demand_units = 0, max_demand_units = None,
 								 		min_activity_value = 0, max_activity_value = 4, mode_activity_value = 1,
 								 		min_activity_threshold = 0, max_activity_threshold = 10, mode_activity_threshold = 3,
-								 		min_demand_unit_price_factor = 0, max_demand_unit_price_factor = 4, mode_demand_unit_price_factor = 1,
+								 		min_demand_unit_price_factor = 0, max_demand_unit_price_factor = 0.01, mode_demand_unit_price_factor = 0.001,
 								 		min_demand_unit_quantity_factor = 0, max_demand_unit_quantity_factor = 2, mode_demand_unit_quantity_factor = 1,
 										longest_effect_time_length = 10, reset = False):
 		if reset:

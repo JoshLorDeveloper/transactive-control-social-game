@@ -12,9 +12,33 @@ class Utilities:
 	def special_min(*args):
 		return min(i for i in args if i is not None)
 		
-	def series_add(base : pd.Series, addition : pd.Series):
-		for key, value in base.items():
-			base[key] = value + addition.get(key, default = 0)
+	def series_add(base : np.ndarray, addition : np.ndarray, addition_displacement = 0):
+		for relative_time_step_index, addition_value in enumerate(addition):
+			absolute_time_step_index = relative_time_step_index + addition_displacement
+			if absolute_time_step_index >= len(base):
+				return
+			else:
+				base[absolute_time_step_index] += addition_value
+
+class ArrayRange:
+	def __init__(self, start_index = 0, length = 1):
+		self._start_index = start_index
+		self._length = length
+
+	def start_index(self):
+		return self._start_index
+	
+	def end_index(self):
+		return self.start_index() + len(self)
+
+	def __len__(self):
+		return self._length
+
+	def __contains__(self, index):
+		return index >= self.start_index() and index < self.end_index()
+	
+	def __str__(self):
+		return "Start Index: {start_index}, Length: {length}".format(start_index = self.start_index(), length = len(self))
 
 class ActivityEnvironment:
 	'''
@@ -28,24 +52,24 @@ class ActivityEnvironment:
 		self._activity_consumers = activity_consumers
 		self._time_domain = time_domain
   
-	def execute(self, energy_price_by_time: pd.Series):
-		energy_price_by_time = energy_price_by_time.subtract(energy_price_by_time.median())
-		for time_step in energy_price_by_time.index:
+	def execute(self, energy_prices: np.ndarray):
+		energy_prices = energy_prices - np.median(energy_prices)
+		for time_step_index in range(len(energy_prices)):
 			for activity_consumer in self._activity_consumers:
-				activity_consumer.execute_step(energy_price_by_time, time_step)
+				activity_consumer.execute_step(energy_prices, time_step_index)
 	
-	def aggregate_demand(self, for_times: np.ndarray = None):
-		if for_times is None:
-			for_times = self._time_domain
+	def aggregate_demand(self, time_range: ArrayRange = None):
+		if time_range is None:
+			time_range = self._time_domain
 		demand_by_activity_consumer = {}
 		for activity_consumer in self._activity_consumers:
-			consumer_demand = activity_consumer.aggregate_demand(for_times)
+			consumer_demand = activity_consumer.aggregate_demand(time_range)
 			demand_by_activity_consumer[activity_consumer] = consumer_demand
 		return demand_by_activity_consumer
 
 	def build(source_file_name = None):
 		if source_file_name is None:
-			source_file_name = "gym-socialgame/gym_socialgame/envs/activity_environments/activity_env.json"
+			source_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"
 		return JsonActivityEnvironmentGenerator.generate_environment(source_file_name)
 	
 	def restore(self):
@@ -54,25 +78,24 @@ class ActivityEnvironment:
 		for activity_consumer in self._activity_consumers:
 			activity_consumer.restore()
 
-	def execute_aggregate(self, energy_prices, for_times: np.ndarray = None):
-		if for_times is None:
-			for_times = self._time_domain
-		energy_prices_by_time = pd.Series(energy_prices, index = for_times)
-		self.execute(energy_prices_by_time)
-		result = self.aggregate_demand(for_times)
+	def execute_aggregate(self, energy_prices, time_range: ArrayRange = None):
+		if time_range is None:
+			time_range = self._time_domain
+		self.execute(energy_prices)
+		result = self.aggregate_demand(time_range)
 		return result
 
-	def restore_execute_aggregate(self, energy_prices, for_times: np.ndarray = None):
-		if for_times is None:
-			for_times = self._time_domain
+	def restore_execute_aggregate(self, energy_prices, time_range: ArrayRange = None):
+		if time_range is None:
+			time_range = self._time_domain
 		self.restore()
-		result = self.execute_aggregate(energy_prices, for_times)
+		result = self.execute_aggregate(energy_prices, time_range)
 		return result
 
-	def build_execute_aggregate(energy_prices, source_file_name = "gym-socialgame/gym_socialgame/envs/activity_environments/activity_env.json"):
+	def build_execute_aggregate(energy_prices, source_file_name = "gym-socialgame/gym_socialgame/envs/activity_env.json"):
 		new_env : ActivityEnvironment = ActivityEnvironment.build(source_file_name)
-		times = new_env._time_domain
-		result = new_env.aggregate_execute(energy_prices, times)
+		time_range = new_env._time_domain
+		result = new_env.aggregate_execute(energy_prices, time_range)
 		return result
 
 	def get_activity_consumers(self):
@@ -155,9 +178,9 @@ class ActivityConsumer:
 			self._demand_unit_quantity_factor = demand_unit_quantity_factor
 
 	def execute_step(self, energy_price_by_time, time_step):
-		to_calculate_for_times = np.array([time_step])
+		to_calculate_for_times = ArrayRange(start_index = time_step)
 		for activity, active_value_by_time in self._activity_values.items():
-			if (not activity._consumed or activity._consumed is None):
+			if (activity._consumed is False or activity._consumed is None):
 				price_effect_at_time = activity.price_effect_by_time(energy_price_by_time, to_calculate_for_times, self)
 				# normalized_price_effect = (price_effect[time_step] - price_effect.median())
 				total_value_for_time = active_value_by_time[time_step] + price_effect_at_time
@@ -167,16 +190,16 @@ class ActivityConsumer:
 					self.consume(time_step, activity)
 
 	def consume(self, time_step, activity):
-		# print("consumed", time_step, activity.name)
 		self._consumed_activities[activity] = time_step
 		activity.consume(time_step)
 
-	def aggregate_demand(self, for_times: np.ndarray):
-		total_demand = pd.Series(np.full(len(for_times), 0, dtype = np.float64), index=for_times)
+	def aggregate_demand(self, time_range: ArrayRange):
+		total_demand = np.zeros(len(time_range), dtype = np.float64)
 		for activity, time_consumed in self._consumed_activities.items():
-			activity_demand = activity.aggregate_demand(time_consumed, for_times, self)
-			Utilities.series_add(total_demand, activity_demand)
-			# total_demand = total_demand.add(activity_demand, fill_value=0)
+			activity_demand = activity.aggregate_demand(time_consumed, time_range, self)
+			total_demand += activity_demand
+			# Utilities.series_add(total_demand, activity_demand, time_consumed)
+
 		return total_demand
 
 	def restore(self):
@@ -207,6 +230,8 @@ class Activity:
 		else:
 			self._demand_units = demand_units
 
+		self.set_length()
+
 		if effect_vectors is None:
 			if not hasattr(self, "_effect_vectors"):
 				self._effect_vectors = {}
@@ -220,25 +245,36 @@ class Activity:
 				self._demand_units = []
 		else:
 			self._demand_units = demand_units
-			
+
+		self.set_length()
+	
 		if effect_vectors is None:
 			if not hasattr(self, "_effect_vectors"):
 				self._effect_vectors = {}
 		else:
 			self._effect_vectors = effect_vectors
 
-	def price_effect_by_time(self, energy_price_by_time, for_times: np.ndarray, for_consumer: ActivityConsumer) -> pd.Series:
-		if len(for_times) == 1:
+	def __len__(self):
+		return self._length
+
+	def set_length(self):
+		if(self._demand_units is not None and len(self._demand_units) > 0):
+			self._length = max(len(demand_unit) for demand_unit in self._demand_units)
+		else:
+			self._length = 0
+			
+	def price_effect_by_time(self, energy_price_by_time, time_range: ArrayRange, for_consumer: ActivityConsumer) -> pd.Series:
+		if len(time_range) == 1:
 			total = 0
 			for demand_unit in self._demand_units:
 				# adds price effect by time to total_price_effect
-				total += demand_unit.price_effect_by_time(energy_price_by_time, for_times, for_consumer)
+				total += demand_unit.price_effect_by_time(energy_price_by_time, time_range, for_consumer)
 			return total
 		else:
-			total_price_effect = pd.Series(np.full(len(for_times), 0), index=for_times)
+			total_price_effect = np.zeros(len(time_range), dtype = np.float64)
 			for demand_unit in self._demand_units:
 				# adds price effect by time to total_price_effect
-				demand_unit.price_effect_by_time(energy_price_by_time, for_times, for_consumer, total_price_effect)
+				demand_unit.price_effect_by_time(energy_price_by_time, time_range, for_consumer, total_price_effect)
 			return total_price_effect
 	
 	def consume(self, time_step):
@@ -248,19 +284,30 @@ class Activity:
 				active_values_by_time = for_consumer._activity_values[activity]
 				Activity.effect_active_values(time_step, active_values_by_time, effect_vector)
 
-	def effect_active_values(time_step, active_values_by_time, effect_vector):
-		for active_time, active_value in active_values_by_time.items():
-			effect_time = active_time - time_step
-			effect_val = effect_vector.get(effect_time, 1)
-			if effect_val != 1:
-				active_values_by_time[active_time] = active_value * effect_val
+	def consume(self, time_step):
+		self._consumed = time_step
+		for for_consumer, effect_vectors_by_activity in self._effect_vectors.items():
+			for activity, effect_vector in effect_vectors_by_activity.items():
+				active_values = for_consumer._activity_values[activity]
+				Activity.effect_active_values(time_step, active_values, effect_vector)
 
-	def aggregate_demand(self, time_consumed, for_times: np.ndarray, for_consumer: ActivityConsumer):
-		total_demand = pd.Series(np.full(len(for_times), 0, dtype = np.float64), index=for_times)
+	def effect_active_values(base_time_step_index, active_values, local_effect_vector):
+		for relative_time_step_index, effect_value in enumerate(local_effect_vector):
+			if effect_value is None or effect_value == 1:
+				continue
+			absolute_time_step_index = base_time_step_index + relative_time_step_index
+			if absolute_time_step_index >= len(active_values):
+				return
+			else:
+				active_values[absolute_time_step_index] *= effect_value
+
+	def aggregate_demand(self, time_consumed, time_range: ArrayRange, for_consumer: ActivityConsumer):
+		total_demand = np.zeros(len(time_range), dtype = np.float64)
 		for demand_unit in self._demand_units:
-			demand_unit_total_demand = demand_unit.absolute_power_consumption_array(time_consumed, for_consumer)
-			Utilities.series_add(total_demand, demand_unit_total_demand)
-			# total_demand = total_demand.add(demand_unit_total_demand, fill_value=0)
+			demand_unit_total_demand = demand_unit.absolute_power_consumption_array(time_consumed, time_range, for_consumer)
+			Utilities.series_add(total_demand, demand_unit_total_demand, time_consumed)
+			# total_demand += demand_unit_total_demand
+		
 		return total_demand
 	
 	def restore(self):
@@ -275,49 +322,49 @@ class DemandUnit:
 			activites
 	'''
 
-	def __init__(self, power_consumption_by_time: pd.Series):
+	def __init__(self, power_consumption_by_time: np.ndarray):
 		self._power_consumption_by_time = power_consumption_by_time
+		self._length = len(self._power_consumption_by_time)
 
-	def price_effect_by_time(self, energy_price_by_time, for_times: np.ndarray, for_consumer: ActivityConsumer, for_return:pd.Series = None) -> pd.Series:
+	def __len__(self):
+		return self._length
+
+	def price_effect_by_time(self, energy_price_by_time, time_range: ArrayRange, for_consumer: ActivityConsumer, for_return:np.ndarray = None) -> pd.Series:
 
 		consumer_price_factor = for_consumer._demand_unit_price_factor[self]
 		consumer_quantity_factor = for_consumer._demand_unit_quantity_factor[self]
 		
-		if for_return is None and len(for_times) != 1:
-			for_return = pd.Series(np.full(len(for_times), 0), index=for_times)
+		if for_return is None and len(time_range) != 1:
+			for_return = np.zeros(len(time_range), dtype = np.float64)
 
-		time_start = self._power_consumption_by_time.index[0]
-		for start_time_step in for_times:
+		for start_time_step_index_delta in range(len(time_range)):
+			anchour_time_step_index = time_range.start_index() + start_time_step_index_delta
 			total = 0
 
-			for time_step_absolute, power_consumption in self._power_consumption_by_time.items():
-				time_step_delta = time_step_absolute - time_start
-				time_step = start_time_step + time_step_delta
-				if time_step in for_times:
-					power_consumed = power_consumption / consumer_quantity_factor[time_step]
-					effect = power_consumed * energy_price_by_time[time_step] * consumer_price_factor[time_step]
+			for time_step_index_delta, power_consumption in enumerate(self._power_consumption_by_time):
+				time_step_index = anchour_time_step_index + time_step_index_delta
+				if time_step_index in time_range:
+					power_consumed = power_consumption / consumer_quantity_factor[time_step_index]
+					effect = power_consumed * energy_price_by_time[time_step_index] * consumer_price_factor[time_step_index]
 					total = total + effect
 			
-			if len(for_times) == 1:
+			if len(time_range) == 1:
 				return total
-			for_return[start_time_step] += total
+			for_return[start_time_step_index_delta] += total
 		
 		return for_return
 	
-	def absolute_power_consumption_array(self, start_time_step, for_consumer: ActivityConsumer):
+	def absolute_power_consumption_array(self, start_time_step_index, time_range: ArrayRange, for_consumer: ActivityConsumer):
 		consumer_quantity_factor = for_consumer._demand_unit_quantity_factor[self]
 		power_consumed_by_time = []
-		time_start = self._power_consumption_by_time.index[0]
-		for time_step_absolute, power_consumption in self._power_consumption_by_time.items():
-			time_step_delta = time_step_absolute - time_start
-			time_step = start_time_step + time_step_delta
-			if time_step in consumer_quantity_factor:
-				power_consumed = power_consumption / consumer_quantity_factor[time_step]
+		for time_step_index_delta, power_consumption in enumerate(self._power_consumption_by_time):
+			time_step_index = start_time_step_index + time_step_index_delta
+			if time_step_index in time_range:
+				quantity_factor = consumer_quantity_factor[time_step_index] if time_step_index < len(consumer_quantity_factor) else 1
+				power_consumed = power_consumption / quantity_factor
 				power_consumed_by_time.append(power_consumed)
 
-		absolute_times = self._power_consumption_by_time.index + start_time_step  - time_start
-
-		return pd.Series(power_consumed_by_time, index=absolute_times[:len(power_consumed_by_time)])
+		return np.array(power_consumed_by_time)
 
 def remove_key_return(original, key, default = None):
 	shallow_copy = dict(original)
@@ -332,20 +379,19 @@ class JsonActivityEnvironmentGenerator:
 
 			json_data = json.load(json_file)
 			
-			# initialize times
-			time_range_descriptor = json_data["times"]
-			start = time_range_descriptor["start"]
-			stop = time_range_descriptor["stop"]
-			interval = time_range_descriptor["interval"]
-			times = np.arange(start, stop, interval)
+			# initialize time range
+			time_range_descriptor = json_data["time_range"]
+			length = time_range_descriptor["length"]
+			start_index = time_range_descriptor["start_index"]
+			time_range = ArrayRange(start_index = start_index, length = length)
 
 			# initialize named demand units
 			named_demand_units = {}
 
 			named_demand_units_data = json_data["named_demand_units"]
 			for demand_unit_name, demand_unit_data in named_demand_units_data.items():
-				demand_unit_data_series = pd.Series(demand_unit_data, index=times[0:len(demand_unit_data)])
-				new_demand_unit = DemandUnit(demand_unit_data_series)
+				demand_unit_data_array = np.array(demand_unit_data)
+				new_demand_unit = DemandUnit(demand_unit_data_array)
 				named_demand_units[demand_unit_name] = new_demand_unit
 
 			# initialize activities
@@ -378,8 +424,8 @@ class JsonActivityEnvironmentGenerator:
 				activity_demand_units_data = activity_data["demand_units"]
 				for elem in activity_demand_units_data:
 					if isinstance(elem, list):
-						demand_unit_data_series = pd.Series(elem, index=times[0:len(elem)])
-						demand_unit = DemandUnit(demand_unit_data_series)
+						demand_unit_data_array = np.array(elem)
+						demand_unit = DemandUnit(demand_unit_data_array)
 						# Adding to named demand units | may want to remove this feature but would reqcuire removing unnamed demand units
 						named_demand_units[demand_unit] = demand_unit
 					elif isinstance(elem, str):
@@ -394,8 +440,8 @@ class JsonActivityEnvironmentGenerator:
 				activity_effect_vectors_data = activity_data["effect_vectors"]
 
 				### setup functions to run through json data
-				generalize_effect_vector_over_times_function = JsonActivityEnvironmentGenerator.series_over_value_function(
-																			times
+				generalize_effect_vector_over_times_function = JsonActivityEnvironmentGenerator.array_over_value_function(
+																			time_range
 																		)
 
 				generalize_effect_vector_over_activities_function = JsonActivityEnvironmentGenerator.dict_over_value_function(
@@ -418,15 +464,15 @@ class JsonActivityEnvironmentGenerator:
 			# finalize setup of activity consumers			
 			def activity_consumer_property_initilization(activity_consumer_data, activity_consumer, old_activity_consumer_data = None):
 				
-				actvity_consumer_setup_args = {}
+				activity_consumer_setup_args = {}
 
 				# define activity values
 				if "activity_values" in activity_consumer_data:
 					activity_values_data = activity_consumer_data["activity_values"]
 
 					#### setup functions to run through json data
-					generalize_consumer_value_over_times_function = JsonActivityEnvironmentGenerator.series_over_value_function(
-																				times
+					generalize_consumer_value_over_times_function = JsonActivityEnvironmentGenerator.array_over_value_function(
+																				time_range
 																			)
 
 					generalize_consumer_value_over_activities_function = JsonActivityEnvironmentGenerator.dict_over_value_function(
@@ -436,15 +482,15 @@ class JsonActivityEnvironmentGenerator:
 					
 					### create property using defined functions
 				
-					actvity_consumer_setup_args["activity_values"] = generalize_consumer_value_over_activities_function(activity_values_data, old_dict_value = activity_consumer._activity_values)
+					activity_consumer_setup_args["activity_values"] = generalize_consumer_value_over_activities_function(activity_values_data, old_dict_value = activity_consumer._activity_values)
 
 				# define activity thresholds
 				if "activity_thresholds" in activity_consumer_data:
 					activity_thresholds_data = activity_consumer_data["activity_thresholds"]
 
 					### setup functions to run through json data | First function unnecessary at the moment
-					generalize_consumer_value_over_times_function = JsonActivityEnvironmentGenerator.series_over_value_function(
-																				times
+					generalize_consumer_value_over_times_function = JsonActivityEnvironmentGenerator.array_over_value_function(
+																				time_range
 																			)
 
 					generalize_consumer_value_over_activities_function = JsonActivityEnvironmentGenerator.dict_over_value_function(
@@ -452,15 +498,15 @@ class JsonActivityEnvironmentGenerator:
 																				generalize_consumer_value_over_times_function
 																			)
 					### create property using defined functions
-					actvity_consumer_setup_args["activity_thresholds"] = generalize_consumer_value_over_activities_function(activity_thresholds_data, old_dict_value = activity_consumer._activity_thresholds)
+					activity_consumer_setup_args["activity_thresholds"] = generalize_consumer_value_over_activities_function(activity_thresholds_data, old_dict_value = activity_consumer._activity_thresholds)
 
 				# define demand unit price factors
 				if "demand_unit_price_factors" in activity_consumer_data:
 					demand_unit_price_factors_data = activity_consumer_data["demand_unit_price_factors"]
 
 					### setup functions to run through json data | First function unnecessary at the moment
-					generalize_consumer_value_over_times_function = JsonActivityEnvironmentGenerator.series_over_value_function(
-																				times
+					generalize_consumer_value_over_times_function = JsonActivityEnvironmentGenerator.array_over_value_function(
+																				time_range
 																			)
 
 					generalize_consumer_value_over_demand_units_function = JsonActivityEnvironmentGenerator.dict_over_value_function(
@@ -468,15 +514,15 @@ class JsonActivityEnvironmentGenerator:
 																				generalize_consumer_value_over_times_function
 																			)
 					### create property using defined functions
-					actvity_consumer_setup_args["demand_unit_price_factor"] = generalize_consumer_value_over_demand_units_function(demand_unit_price_factors_data, old_dict_value = activity_consumer._demand_unit_price_factor)
+					activity_consumer_setup_args["demand_unit_price_factor"] = generalize_consumer_value_over_demand_units_function(demand_unit_price_factors_data, old_dict_value = activity_consumer._demand_unit_price_factor)
 
 				# define demand unit quantity factors
 				if "demand_unit_quantity_factors" in activity_consumer_data:
 					demand_unit_quantity_factors_data = activity_consumer_data["demand_unit_quantity_factors"]
 
 					### setup functions to run through json data | First function unnecessary at the moment
-					generalize_consumer_value_over_times_function = JsonActivityEnvironmentGenerator.series_over_value_function(
-																				times
+					generalize_consumer_value_over_times_function = JsonActivityEnvironmentGenerator.array_over_value_function(
+																				time_range
 																			)
 
 					generalize_consumer_value_over_demand_units_function = JsonActivityEnvironmentGenerator.dict_over_value_function(
@@ -485,14 +531,14 @@ class JsonActivityEnvironmentGenerator:
 																			)
 
 					### create property using defined functions
-					actvity_consumer_setup_args["demand_unit_quantity_factor"] = generalize_consumer_value_over_demand_units_function(demand_unit_quantity_factors_data, old_dict_value = activity_consumer._demand_unit_quantity_factor)
+					activity_consumer_setup_args["demand_unit_quantity_factor"] = generalize_consumer_value_over_demand_units_function(demand_unit_quantity_factors_data, old_dict_value = activity_consumer._demand_unit_quantity_factor)
 
 				# setup activity consumer with found information
-				activity_consumer.setup(**actvity_consumer_setup_args)
+				activity_consumer.setup(**activity_consumer_setup_args)
 			
 			JsonActivityEnvironmentGenerator.loop_over_value(named_activity_consumers_data, named_activity_consumers, activity_consumer_property_initilization)
 
-			return ActivityEnvironment(activity_list, activity_consumer_list, times)
+			return ActivityEnvironment(activity_list, activity_consumer_list, time_range)
 
 	# loops over values in json data and calls function on them | Effectively a map function
 	def loop_over_value(property_json_data, property_name_dict, function_on_child_value = None):
@@ -511,13 +557,13 @@ class JsonActivityEnvironmentGenerator:
 		return dict_over_value
 
 	# time
-	def series_over_value_function(property_domain, function_on_child_value = None):
-		def series_over_value(property_json_data, parent = None, old_series_value = None):
+	def array_over_value_function(array_range: ArrayRange, function_on_child_value = None):
+		def array_over_value(property_json_data, parent = None, old_array_value = None):
 
-			property_series = JsonActivityEnvironmentGenerator.over_full_series_property(property_json_data, property_domain, function_on_child_value, old_series_value)
-			return property_series
+			property_array = JsonActivityEnvironmentGenerator.over_full_array_property(property_json_data, array_range, function_on_child_value, old_array_value)
+			return property_array
 
-		return series_over_value
+		return array_over_value
 
 	# activites, demand_units, activity_consumers
 	def over_full_dict_property(object_json_data, named_objects, function_on_value = None, to_return = {}):
@@ -548,33 +594,34 @@ class JsonActivityEnvironmentGenerator:
 		return to_return
 	
 	# time
-	def over_full_series_property(object_json_data, series_keys_list, function_on_value = None, to_return = None):
+	def over_full_array_property(object_json_data, array_range: ArrayRange, function_on_value = None, to_return = None):
 
-		series_values = []
+		array_values = []
 		
 		object_json_data, general_object_data = remove_key_return(object_json_data, "*")
 
 		if general_object_data is not None:
 
-			series_values = JsonActivityEnvironmentGenerator.generalize_list(
+			array_values = JsonActivityEnvironmentGenerator.generalize_list(
 				general_object_data, 
-				series_keys_list, 
+				array_range, 
 				function_on_value
 			)
 			
-			to_return = pd.Series(series_values, index=series_keys_list)
+			to_return = np.array(array_values)
 		elif to_return is None:
 
-			series_values = JsonActivityEnvironmentGenerator.generalize_list(
+			array_values = JsonActivityEnvironmentGenerator.generalize_list(
 				None, 
-				series_keys_list
+				array_range
 			)
 			
-			to_return = pd.Series(series_values, index=series_keys_list)
+			to_return = np.array(array_values)
 
 		for series_key, specific_object_data in object_json_data.items():
 			int_key = int(series_key)
-			if int_key in series_keys_list:
+			int_index = int_key - array_range.start_index()
+			if int_index in array_range:
 				if function_on_value is not None:
 					to_return[int_key] = function_on_value(specific_object_data, series_key, to_return.get(int_key))
 				else:
@@ -590,11 +637,11 @@ class JsonActivityEnvironmentGenerator:
 				to_return[key] = value_to_generalize
 		return to_return
 
-	def generalize_list(value_to_generalize, generalize_over, function_on_value = None):
+	def generalize_list(value_to_generalize, array_range: ArrayRange, function_on_value = None):
 		series_values = []
-		for key in generalize_over:
+		for index in range(array_range.start_index(), array_range.end_index()):
 			if function_on_value is not None:
-				series_values.append(function_on_value(value_to_generalize, key))
+				series_values.append(function_on_value(value_to_generalize, index))
 			else:
 				series_values.append(value_to_generalize)
 		return series_values

@@ -24,7 +24,7 @@
             },
             "demand_unit_price_factors": {
                 "*": {
-                    "*": 0.005
+                    "*": 0.001
                 }
             },
             "demand_unit_quantity_factors": {

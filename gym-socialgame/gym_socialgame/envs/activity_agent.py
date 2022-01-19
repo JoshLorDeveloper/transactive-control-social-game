@@ -708,7 +708,7 @@ class JSONFileAutomator:
 								min_demand_units = 1, max_demand_units = 4,
 								min_activities = 0, max_activities = None,
 								min_activity_consumers = 0, max_activity_consumers = None,
-								min_effect = 0, max_effect = 10, mode_effect = 1, longest_effect_time_length = 10, reset = False):
+								min_effect = 0, max_effect = 2, mode_effect = 1, longest_effect_time_length = 10, reset = False):
 		if reset:
 			if "*" in activities_data:
 				activities_data = {"*": activities_data["*"]}
@@ -734,7 +734,7 @@ class JSONFileAutomator:
 				for activity_name in effect_activities_names:
 					effect_times_num = random.randint(0, longest_effect_time_length - 1)
 					effect_times_descriptors = sorted(random.sample(range(0, longest_effect_time_length), effect_times_num))
-					effect_times_values = np.random.triangular(min_effect, mode_effect, max_effect, size = effect_times_num).round(decimals = 3)
+					effect_times_values = np.random.lognormal(1, 0.25, size = effect_times_num).round(decimals = 3)
 
 					activity_effects[activity_name] = pd.Series(effect_times_values, index = effect_times_descriptors).to_dict()
 
@@ -762,7 +762,7 @@ class JSONFileAutomator:
 										min_demand_units = 0, max_demand_units = None,
 								 		min_activity_value = 0, max_activity_value = 4, mode_activity_value = 1,
 								 		min_activity_threshold = 0, max_activity_threshold = 10, mode_activity_threshold = 3,
-								 		min_demand_unit_price_factor = 0, max_demand_unit_price_factor = 0.015, mode_demand_unit_price_factor = 0.005,
+								 		min_demand_unit_price_factor = 0, max_demand_unit_price_factor = 0.01, mode_demand_unit_price_factor = 0.002,
 								 		min_demand_unit_quantity_factor = 0, max_demand_unit_quantity_factor = 2, mode_demand_unit_quantity_factor = 1,
 										longest_effect_time_length = 10, reset = False):
 		if reset:

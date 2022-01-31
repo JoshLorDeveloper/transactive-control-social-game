@@ -299,11 +299,14 @@ if __name__ == "__main__":
                                                     )
         else:
             size_props = JSONFileAutomator.read_size_props()
+        
+        group_name = '{0} | {1} | {2}'.format(size_props[0], size_props[1], size_props[2])
+        wandb.init(project="activity_agent_grouped", entity="joshlor", group=group_name) 
+
         if args.keep_json:
             folder_location = "gym-socialgame/gym_socialgame/envs/activity_environments/{file_name}"
             copyfile(folder_location.format(file_name = "activity_env.json"), folder_location.format(file_name = (wandb.run.name + ".json")))
-        group_name = '{0} | {1} | {2}'.format(size_props[0], size_props[1], size_props[2])
-        wandb.init(project="activity-agent-tests", entity="joshlor", group=group_name) 
+        
         wandb.tensorboard.patch(root_logdir=args.log_path) # patching the logdir directly seems to work
         wandb.config.update(args)
 

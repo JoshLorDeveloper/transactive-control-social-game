@@ -647,10 +647,55 @@ class JsonActivityEnvironmentGenerator:
 		return series_values
 
 class JSONFileAutomator:
-	def edit_file(json_file_name = None, reset_param = False):
+
+	DEFAULT_DEMAND_UNITS = 20
+	DEFAULT_ACTIVITIES = 20
+	DEFAULT_ACTIVITY_CONSUMERS = 8
+
+	def read_size_props(json_file_name = None):
+		if json_file_name is None:
+			json_file_name = "gym-socialgame/gym_socialgame/envs/activity_environments/activity_env.json"
+
+		with open(json_file_name, "r") as json_file:
+		
+			activity_env_data = json.load(json_file)
+		
+		if 'num_demand_units' in activity_env_data:
+			num_demand_units = activity_env_data['num_demand_units']
+		else :
+			demand_units_data = activity_env_data.get("named_demand_units", {})
+			num_demand_units = len(demand_units_data)
+		
+		if 'num_activities' in activity_env_data:
+			num_activities = activity_env_data['num_activities']
+		else :
+			activities_data = activity_env_data.get("activities", {})
+			num_activities = len(activities_data)
+		
+		if 'num_activity_consumers' in activity_env_data:
+			num_activity_consumers = activity_env_data['num_activity_consumers']
+		else :
+			activity_consumers_data = activity_env_data.get("activity_consumers", {})
+			num_activity_consumers = len(activity_consumers_data)
+
+		return (num_demand_units, num_activities, num_activity_consumers)
+
+	def edit_file(json_file_name = None, reset_param = False, 
+										num_demand_units = None, 
+										num_activities = None, 
+										num_activity_consumers = None):
 
 		if json_file_name is None:
 			json_file_name = "gym-socialgame/gym_socialgame/envs/activity_environments/activity_env.json"
+
+		if num_demand_units is None:
+			num_demand_units = JSONFileAutomator.DEFAULT_DEMAND_UNITS
+		
+		if num_activities is None:
+			num_activities = JSONFileAutomator.DEFAULT_ACTIVITIES
+
+		if num_activity_consumers is None:
+			num_activity_consumers = JSONFileAutomator.DEFAULT_ACTIVITY_CONSUMERS
 
 		with open(json_file_name, "a+") as json_file:
 			#return to start of file
@@ -661,17 +706,21 @@ class JSONFileAutomator:
 			else:
 				with open("gym-socialgame/gym_socialgame/envs/activity_environments/base_env.json", "r") as base_json_file:
 					activity_env_data = json.load(base_json_file)
-			
-		demand_unit_dict = JSONFileAutomator.generate_demand_units_data(20, demand_units_data = activity_env_data.get("named_demand_units", {}), reset = reset_param)
+		
+		activity_env_data['num_demand_units'] = num_demand_units
+		activity_env_data['num_activities'] = num_activities
+		activity_env_data['num_activity_consumers'] = num_activity_consumers
+
+		demand_unit_dict = JSONFileAutomator.generate_demand_units_data(num_demand_units, demand_units_data = activity_env_data.get("named_demand_units", {}), reset = reset_param)
 
 		old_activities_data = activity_env_data.get("activities", {})
 		old_activities_names = list(old_activities_data.keys())
-		new_activities_names = JSONFileAutomator.generate_activities_names(20, activities_names = old_activities_names, reset = reset_param)
+		new_activities_names = JSONFileAutomator.generate_activities_names(num_activities, activities_names = old_activities_names, reset = reset_param)
 		all_activities_names = [*old_activities_names, *new_activities_names]
 
 		old_activity_consumers_data = activity_env_data.get("activity_consumers", {})
 		old_activity_consumers_names = list(old_activity_consumers_data.keys())
-		new_activity_consumers_names = JSONFileAutomator.generate_activity_consumers_names(8, activity_consumers_names = old_activity_consumers_names, reset = reset_param)
+		new_activity_consumers_names = JSONFileAutomator.generate_activity_consumers_names(num_activity_consumers, activity_consumers_names = old_activity_consumers_names, reset = reset_param)
 		all_activity_consumers_names = [*old_activity_consumers_names, *new_activity_consumers_names]
 
 		activity_env_data["named_demand_units"] = demand_unit_dict
@@ -680,6 +729,8 @@ class JSONFileAutomator:
 
 		with open(json_file_name, "w") as json_file:
 			json.dump(activity_env_data, json_file, ensure_ascii=False, indent=4)
+		
+		return (num_demand_units, num_activities, num_activity_consumers)
 	
 	def generate_demand_units_data(num, demand_units_data = {}, min_length = 1, max_length = 5, min_demand = 0, max_demand = 200, reset = False):
 		if reset:
@@ -834,9 +885,32 @@ class JSONFileAutomator:
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser("reset_args")
 	parser.add_argument("-f", "--file", help="The file name.")
-	parser.add_argument("-r", "--reset", help="Whether file should be reset.", action="store_true")
+	parser.add_argument(
+		"--new_agents",
+		help="Whether to create new agents and store in file.",
+		action="store_true"
+	)
+	parser.add_argument(
+		"--num_demand_units",
+		help="Number of demand units to use.",
+		type=int
+	)
+	parser.add_argument(
+		"--num_activities",
+		help="Number of activities to use.",
+		type=int
+	)
+	parser.add_argument(
+		"--num_activity_consumers",
+		help="Number of activity consumers to use.",
+		type=int
+	)
 	args = parser.parse_args()
-	file_param = args.file
-	reset_param = args.reset
-	JSONFileAutomator.edit_file(json_file_name = file_param, reset_param = reset_param)
+	JSONFileAutomator.edit_file (
+									json_file_name = args.file,
+									reset_param = args.new_agents, 
+									num_demand_units = args.num_demand_units,
+									num_activities = args.num_activities,
+									num_activity_consumers = args.num_demand_units
+								)
 		

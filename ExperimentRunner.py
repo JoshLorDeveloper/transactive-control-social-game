@@ -213,6 +213,21 @@ parser.add_argument(
     action="store_true"
 )
 parser.add_argument(
+    "--num_demand_units",
+    help="Number of demand units to use.",
+    type=int
+)
+parser.add_argument(
+    "--num_activities",
+    help="Number of activities to use.",
+    type=int
+)
+parser.add_argument(
+    "--num_activity_consumers",
+    help="Number of activity consumers to use.",
+    type=int
+)
+parser.add_argument(
     "--keep_json",
     help="Whether to save the json file when running the activity agent.",
     action="store_true"
@@ -275,12 +290,20 @@ if __name__ == "__main__":
 
     # Uploading logs to wandb
     if args.wandb:
-        wandb.init(project="my-test-project", entity="joshlor")
         if args.new_agents:
-            JSONFileAutomator.edit_file(reset_param = True) 
+            size_props = JSONFileAutomator.edit_file(
+                                                        reset_param = True, 
+                                                        num_demand_units = args.num_demand_units,
+                                                        num_activities = args.num_activities,
+                                                        num_activity_consumers = args.num_demand_units,
+                                                    )
+        else:
+            size_props = JSONFileAutomator.read_size_props()
         if args.keep_json:
             folder_location = "gym-socialgame/gym_socialgame/envs/activity_environments/{file_name}"
-            copyfile(folder_location.format(file_name = "activity_env.json"), folder_location.format(file_name = (wandb.run.name + ".json"))) 
+            copyfile(folder_location.format(file_name = "activity_env.json"), folder_location.format(file_name = (wandb.run.name + ".json")))
+        group_name = '{0} | {1} | {2}'.format(size_props[0], size_props[1], size_props[2])
+        wandb.init(project="activity-agent-tests", entity="joshlor", group=group_name) 
         wandb.tensorboard.patch(root_logdir=args.log_path) # patching the logdir directly seems to work
         wandb.config.update(args)
 
